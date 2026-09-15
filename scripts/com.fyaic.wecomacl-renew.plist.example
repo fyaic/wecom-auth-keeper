@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.fyaic.wecomacl-renew</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>/Users/admin/Projects/wecom-auth-keeper/scripts/keepalive-run.sh</string>
+    </array>
+    <key>StartInterval</key>
+    <integer>3600</integer>
+    <key>StandardOutPath</key>
+    <string>/tmp/wecom-auth-renew-keepalive.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/wecom-auth-renew-keepalive.log</string>
+</dict>
+</plist>

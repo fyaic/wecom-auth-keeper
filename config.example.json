@@ -1,0 +1,13 @@
+{
+  "bot_chat_name": "<机器人会话名，如：XX的询价登记bot>",
+  "aibotid": "<数字bot id，从续期链接 aibotid= 参数取>",
+  "str_aibotid": "<字符串bot id，从续期链接 str_aibotid= 参数取>",
+  "target_rows": ["新建与编辑文档", "搜索与获取文档内容"],
+  "bridge_url": "http://127.0.0.1:23392",
+  "bridge_send_link": true,
+  "wecom_bridge_src": "/Users/admin/Projects/wecom-bridge/src",
+  "venv_python": "/Users/admin/Projects/wecom-bridge/.venv/bin/python3",
+  "state_file": "~/.wecom-auth-renew/state.json",
+  "log_file": "~/.wecom-auth-renew/renew.log",
+  "notify_to": "<接收续期通知的成员名，如：张三>"
+}
