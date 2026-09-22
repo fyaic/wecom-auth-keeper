@@ -130,10 +130,12 @@ class Renewal:
             raise KeeperError("ambiguous_window", "Close duplicate authorization windows first")
         return valid[0] if valid else None
 
-    def open(self, existing_only=False, send_link=False):
+    def open(self, existing_only=False, send_link=False, activate=False):
         native, self.app = self.ax.application()
         current = self.select_window()
         if current is not None:
+            if activate:
+                self.ax.activate(native)
             return current
         if existing_only:
             raise KeeperError("page_not_open", "Open the target bot's permissions page first")
@@ -178,14 +180,19 @@ class Renewal:
             role, text, bounds = self.ax.ax_get(node, "AXRole"), self.text(node), self.ax.frame(node)
             if role in {"AXStaticText", "AXButton"} and text and bounds:
                 elements.append((text, node, bounds, role))
+        # Capability descriptions can repeat the heading (e.g. contacts).
+        # Headings share the leftmost column; description chips are indented.
+        columns = [e[2][0] for e in elements if e[0] in CAPABILITY_LABELS.union(self.rows)]
+        heading_x = min(columns) if columns else None
+        headings = [e for e in elements if heading_x is not None and abs(e[2][0] - heading_x) <= 2]
         result = {}
         for name in self.rows:
-            anchors = [e for e in elements if e[0] == name]
+            anchors = [e for e in headings if e[0] == name]
             row = {"status": "missing", "expiry": None, "btn": None, "authorized": None}
             if len(anchors) == 1:
                 x, y, _, _ = anchors[0][2]
                 # A narrow row band, with positive evidence required. Ambiguity fails closed.
-                next_rows = [e[2][1] for e in elements
+                next_rows = [e[2][1] for e in headings
                              if e[0] in CAPABILITY_LABELS.union(self.rows)
                              and abs(e[2][0] - x) < 40 and e[2][1] > y]
                 limit = min([y + 70, *next_rows])
@@ -208,7 +215,7 @@ class Renewal:
         self.bound(window)  # Recheck identity immediately before every action.
         if element is None:
             raise KeeperError("control_missing", "Expected action control is missing")
-        self.ax.click(element, window)
+        self.ax.click(element, self.bound(window))
 
     def named(self, window, text, role=None):
         return [n for n in self.walk(window) if self.text(n) == text and (role is None or self.ax.ax_get(n, "AXRole") == role)]
@@ -275,7 +282,7 @@ class Renewal:
         # Inspection does not send messages or alter bridge state.
         cfg = self.cfg if mode != "check" else {**self.cfg, "bridge_monitor": False}
         with monitor_guard(cfg):
-            window = self.open(existing_only, mode != "check" and self.cfg.get("bridge_send_link", False))
+            window = self.open(existing_only, mode != "check" and self.cfg.get("bridge_send_link", False), activate=mode != "check")
             before = self.wait(lambda: self.read_rows(window),
                                lambda rows: all(r["status"] in {"authorized", "expired"} for r in rows.values()), "rows_incomplete")
             if mode != "check":

@@ -88,6 +88,15 @@ class Fixture(unittest.TestCase):
 
 
 class StateTests(Fixture):
+    def test_contacts_description_does_not_duplicate_heading(self):
+        self.cfg['target_rows'] = ['搜索企业成员']
+        ax = FakeAX(self.cfg)
+        ax.page['AXChildren'].append(node('AXStaticText', '搜索企业成员', x=108, y=135))
+        result, code = self.engine(ax).run('pre-renew', True, 24)
+        self.assertEqual(code, 0)
+        self.assertEqual(result['rows']['搜索企业成员']['status'], 'authorized')
+        self.assertEqual([name for text, name in ax.clicks if text == '授权'], ['搜索企业成员'])
+
     def test_main_failure_is_nonzero_json_and_invalidates_cached_success(self):
         ax=FakeAX(self.cfg)
         engine=self.engine(ax)
