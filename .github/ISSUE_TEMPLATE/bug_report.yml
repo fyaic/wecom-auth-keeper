@@ -17,7 +17,7 @@ body:
         - Setup or repository checks
         - CLI probes
         - Expired-permission renewal
-        - Pre-expiry desktop experiment (not integrated)
+        - Experimental pre-expiry existing-window mode
         - Other
     validations:
       required: true

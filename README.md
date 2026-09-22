@@ -12,7 +12,7 @@
 
 wecom-auth-keeper 使用 macOS 企业微信桌面端的已有登录会话，检测授权失效并操作官方授权界面。项目不提供官方续期 API，也不会消除平台的七天授权规则。
 
-> **当前是实验性运维工具。** 仓库脚本实现到期后的续期；未到期时“取消授权 → 重新授权”已完成实机桌面自动化验证，尚未封装为独立定时脚本。需要常驻、已登录且可操作的 macOS 桌面。
+> **当前是实验性运维工具。** 仓库脚本实现到期后的续期；未到期时“取消授权 → 重新授权”已完成桌面代理实机验证，并新增实验性 `--pre-renew --existing-window` 状态机；新版独立实现尚未完成真实重授权验收。需要常驻、已登录且可操作的 macOS 桌面。
 
 ## 已经验证了什么？
 
@@ -20,10 +20,10 @@ wecom-auth-keeper 使用 macOS 企业微信桌面端的已有登录会话，检�
 |---|---|---|
 | CLI 文档读写双探针 | 已实现；作者报告生产运行 | [授权模型与历史](docs/auth-model.md) |
 | 到期后点击授权并复探 | 已实现；作者报告真实恢复 | [验证记录](docs/validation.md) |
-| 未到期时取消再授权 | **实机复现成功**；未集成进 `renew.py` | [预续期验证](docs/validation.md) |
+| 未到期时取消再授权 | **桌面代理实机复现成功**；已实现实验性现有窗口模式 | [预续期验证](docs/validation.md) |
 | 新机器独立安装、多周期无人值守 | 待完成 | [验收路线图](docs/roadmap.md) |
 
-2026-09-21，对一个目标机器人的既有权限执行桌面自动化，文档读取有效期从 **9/22 18:01 → 9/28 16:36**，写入从 **9/22 18:01 → 9/28 16:39**。关闭权限页后重新打开，结果一致，全程没有扫码或人工点击。此验证由桌面代理完成，不能据此声称当前仓库脚本已支持预续期。
+2026-09-21，对一个目标机器人的既有权限执行桌面自动化，文档读取有效期从 **9/22 18:01 → 9/28 16:36**，写入从 **9/22 18:01 → 9/28 16:39**。关闭权限页后重新打开，结果一致，全程没有扫码或人工点击。此验证由桌面代理完成；9 月 22 日新增的独立状态机另有自动化回归测试，不与该实机证据混同。
 
 ## 工作方式
 
@@ -44,26 +44,29 @@ flowchart LR
 ```bash
 git clone https://github.com/fyaic/wecom-auth-keeper.git
 cd wecom-auth-keeper
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
 cp config.example.json config.json
 ```
 
-接着按[部署指南](docs/getting-started.md)配置目标机器人、专用探针表格及 `wecom-bridge` 的 Python 环境。当前核心代码依赖外部 bridge 的 AX helpers；只有 PyObjC 不足以运行。
+接着按[部署指南](docs/getting-started.md)配置目标机器人及专用探针表格。原生 AX 适配层已内置，不再需要 bridge 源码；bridge 仅用于可选的消息投递、通知与 monitor 协调。
 
-**`--check` 会打开桌面页面，并可能发送链接消息、切换 bridge monitor 模式及写状态文件。它不是纯只读命令。** 配置 `bridge_send_link=false` 可关闭链接投递，但仍需目标聊天中已有可见的授权链接。
+`--doctor` 只检查本地配置、平台和依赖，不操作 GUI。`--check` 不发送消息、不修改授权或 monitor，但可能打开已有链接并写本地状态；加 `--existing-window` 可禁止导航。`--pre-renew` 必须配合 `--existing-window`，逐条恢复临近到期权限并保存中断恢复记录。
 
 无需企业微信或凭据即可执行仓库结构检查：
 
 ```bash
 python3 scripts/check_repository.py
+python3 -m unittest discover -s tests -v
 ```
 
-该检查覆盖 Python/Bash 语法、配置模板、plist 和本地文档链接，不证明 GUI 续期功能正常。
+检查覆盖仓库结构与状态机、进程入口、失败恢复等回归；macOS 安装依赖后还会验证原生 AX 值转换。它们不代替真实账号端到端验收。
 
 ## 使用前了解
 
 - 适合愿意维护一台常驻 Mac 的 `wecom-cli` 自动化项目。当前不支持 Linux/Windows 的桌面续期。
 - CLI 写探针会覆盖指定测试表的首个单元格；请使用专用测试表。
-- 当前核心脚本存在状态误判、退出码和失败告警等已知问题，详见[已知限制](docs/known-limitations.md)。不要只凭 `ok=true` 判定业务恢复。
+- 状态不完整或恢复失败会返回非零退出码。GUI 有效期通过不等于业务调用通过；保活须同时验证 CLI 读写探针。仍有界面兼容性边界，详见[已知限制](docs/known-limitations.md)。
 - 到期、授权主体、客户端版本和界面结构都可能影响结果。七天周期是实测结论，不是本项目对平台未来行为的保证。
 
 ## 参与和交流

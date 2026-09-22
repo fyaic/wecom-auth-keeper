@@ -6,7 +6,7 @@
 
 1. 搜索已有 Issue，选择一个可独立验证的问题；较大架构改动先讨论。
 2. Fork 仓库并建立工作分支。文档和结构检查不需要企业微信账号。
-3. 运行 `python3 scripts/check_repository.py` 和 `git diff --check`。
+3. 运行 `python3 scripts/check_repository.py`、`python3 -m unittest discover -s tests -v` 和 `git diff --check`。macOS 安装 `requirements-macos.txt` 后会执行原生 AX 值转换测试；其余测试不操作真实账号。
 4. 使用 PR 模板说明问题、变更和验证范围。修复行为时补充能覆盖真实失败的回归测试。
 
 ## 桌面与真实账号验证

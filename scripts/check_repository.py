@@ -54,8 +54,9 @@ def main():
     required = {
         "bot_chat_name", "aibotid", "str_aibotid", "target_rows",
         "read_docid", "write_docid", "write_sheet", "venv_python",
-        "wecom_bridge_src", "state_file", "log_file", "bridge_url",
-        "bridge_send_link", "notify_to",
+        "state_file", "log_file", "bridge_url", "wecom_cli",
+        "bridge_send_link", "bridge_monitor", "notify_to", "probe_timeout",
+        "renew_timeout", "lock_wait",
     }
     missing = required - config.keys()
     if missing:

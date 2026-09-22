@@ -1,72 +1,101 @@
 # 部署指南
 
-[返回首页](../README.md)
+[返回首页](../README.md) · [命令与退出码](#命令与退出码)
 
-当前发行形态是源码脚本，不是可独立 `pip install` 的包。先阅读[已知限制](known-limitations.md)，再决定是否用于自己的环境。
+## 安装
 
-## 前置条件
-
-- macOS 企业微信桌面端已登录，登录成员能管理目标机器人；保持可操作的图形会话。休眠、锁屏和其他桌面自动化可能影响结果。
-- 已安装并授权 `@wecom/cli`。当前探针硬编码 `/opt/homebrew/bin/wecom-cli`，其他安装位置需要先调整脚本。
-- 有可用的 `wecom-bridge` 源码与 Python 环境，其中 `wecom.ax.helpers` 可导入。该依赖链包含 Cocoa、Quartz、ApplicationServices 以及 bridge 自身配置依赖，请遵循所用 bridge 版本的安装说明。当前仓库未锁定一个可复现的 bridge 版本。
-- Python 进程具备 macOS 辅助功能访问权限。
-- 专用测试表：读探针调用 `sheet get`；写探针在指定子表首个单元格写入时间戳。不要把写目标设成业务表。
-
-## 配置
+需要 macOS、Python 3.11+、已登录的企业微信桌面端，以及有权管理目标机器人的成员身份。GUI 必须可操作；休眠、锁屏和其他自动化会影响执行。
 
 ```bash
+git clone https://github.com/fyaic/wecom-auth-keeper.git
+cd wecom-auth-keeper
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
 cp config.example.json config.json
 ```
 
-编辑 `config.json`：
+原生 AX 适配层已内置，不再需要 `wecom-bridge` 源码或它的 `.env`。依赖固定在 `requirements-macos.txt`。Python 进程仍需 macOS 辅助功能访问权限；程序不会自动弹框申请。
+
+使用探针前需自行完成 `wecom-cli` 安装及 bot 授权。程序不读取或输出本地凭据，也不会自动 `auth init` 切换 bot。
+
+## 配置
 
 | 字段 | 说明 |
 |---|---|
-| `bot_chat_name` | 目标机器人聊天名 |
-| `aibotid` / `str_aibotid` | 目标授权链接中的参数；仅保存在本地 |
-| `target_rows` | 默认两条文档能力的页面名称 |
-| `read_docid` | 读探针在线表格 |
-| `write_docid` / `write_sheet` | 专用写探针表及子表 |
-| `venv_python` | 可导入 bridge helpers 的 Python **绝对路径** |
-| `wecom_bridge_src` | bridge 的 `src` **绝对路径** |
-| `bridge_send_link` | 是否通过 bridge 给机器人聊天发送授权链接；示例为 true |
-| `bridge_url` | 对应 bridge HTTP 服务地址 |
-| `notify_to` | 可选通知收件人；空字符串表示不通知 |
-| `state_file` / `log_file` | 本地状态与日志；示例使用 `~/.wecom-auth-renew/` |
+| `bot_chat_name` | 目标机器人会话名；供可选的链接投递使用 |
+| `aibotid` / `str_aibotid` | 同一目标授权链接中的两项身份参数；均须字符串，仅保存在本地 |
+| `target_rows` | 需要检查/恢复的能力行名；默认文档读、写两项 |
+| `read_docid` | CLI 读探针表格 |
+| `write_docid` / `write_sheet` | **专用测试表**及子表；写探针覆盖其 A1 单元格 |
+| `wecom_cli` | 默认从 PATH 找 `wecom-cli`，也可设绝对路径 |
+| `venv_python` | 运行 GUI 恢复子进程的 Python，填写本仓库 `.venv/bin/python3` 的绝对路径 |
+| `state_file` / `log_file` | 状态快照与保活 JSONL 日志；相对路径基于配置文件目录 |
+| `probe_timeout` | 每次 CLI 探针超时秒数 |
+| `renew_timeout` | 保活启动的 GUI 子进程总超时秒数 |
+| `lock_wait` | 等待进程锁的秒数；超时退出 4 |
+| `bridge_send_link` | 可选：通过 bridge 发授权链接；默认 false |
+| `bridge_monitor` | 可选：操作前切 observe、完成后恢复原模式；默认 false，与发送开关独立 |
+| `bridge_url` / `notify_to` | 可选 bridge HTTP 地址与通知接收人；默认不通知 |
 
-可从已有的 `850003` 报错 `help_message` 中取授权链接参数，不需要故意让正常业务过期。请勿公开包含真实参数的完整链接、配置文件或日志。
+从已有的 850003 报错帮助链接或正确机器人的管理权限页取得身份参数；不要为了取链接让业务故意过期。CLI 当前凭据必须对应同一 bot——配置页身份校验不自动验证 CLI 凭据归属，部署者应核对。
 
-`bridge_send_link=false` 只关闭消息投递，不移除核心对 bridge Python 模块的依赖。当前脚本不会主动定位目标聊天：请先打开正确会话，确保已有授权链接在可见区域。开启投递时也应核对 bridge 使用的是同一企业微信会话。
+旧 `wecom_bridge_src` 配置不再需要。旧配置未指定 `bridge_monitor` 时，保持与 `bridge_send_link` 一致的兼容行为；建议显式设定。
 
-## 交互检查与到期恢复
+## 本地检查
 
-先创建示例配置所需目录；自定义路径时改为对应目录：
-
-```bash
-mkdir -p "$HOME/.wecom-auth-renew"
-```
-
-以下 `PYTHON` 须替换为配置中的 `venv_python`。检查会操作桌面；开启链接投递时也会发送消息。
+填写真实配置后运行：
 
 ```bash
-PYTHON="/absolute/path/to/bridge/.venv/bin/python3"
-"$PYTHON" renew.py --config config.json --check
+.venv/bin/python renew.py --config config.json --doctor
 ```
 
-核对目标机器人、两行权限和实际有效期。不要只看 `ok=true`：当前脚本可能在读取不完整时返回成功。
+该命令只检查配置、平台、可导入模块与 CLI 可执行路径；不发消息、不打开 GUI、不探测业务权限，也不证明辅助功能权限已就绪。它检查的是当前 Python 进程，`venv_python` 应指向同一个环境。
 
-需要恢复已经到期的权限时：
+## 检查与到期恢复
+
+先在企业微信中打开目标 bot 的“可使用权限”页：
 
 ```bash
-"$PYTHON" renew.py --config config.json --renew
-bash scripts/probe.sh
+.venv/bin/python renew.py --config config.json --check --existing-window
 ```
 
-最后一条命令会写入测试表。读写探针都返回 0，才算这两项操作恢复。仓库 `--renew` 不会撤销尚未到期的权限；预续期仍是[实机验证中的独立流程](validation.md)。
+`--check` 不改授权、不发消息、不改 monitor；它会写本地状态。省略 `--existing-window` 时可点击当前可见的目标授权链接，但不会主动切换到指定聊天。页面必须暴露匹配两项 bot 参数的 AXWebArea URL，否则拒绝操作。
 
-## 可选：每小时调度
+恢复已经到期的配置项，然后验证业务读写：
 
-完成手工验证后，编辑 `scripts/com.fyaic.wecomacl-renew.plist.example` 中的仓库绝对路径，再安装：
+```bash
+.venv/bin/python renew.py --config config.json --renew
+.venv/bin/python probe.py --config config.json
+```
+
+第二条会写专用测试表。GUI 成功只说明页面状态健康；保活流程还要求读写探针都通过。
+
+## 实验性预续期：现有窗口模式
+
+在目标 bot 详情打开“可使用权限”，将需要续期的行滚动到可见位置：
+
+```bash
+.venv/bin/python renew.py --config config.json \
+  --pre-renew --existing-window --within-hours 24
+```
+
+仅处理指定能力中 24 小时内到期的行；已到期的行直接重授，健康且远于阈值的行跳过。每次只取消并恢复一条，再进入下一条。此命令不会自动导航管理列表或滚动不可见控件；相关自动导航仍待实现。
+
+取消前持久化 `<state_file>.pending.json`。中断后，程序优先重授；仍失败则保留记录并停止。下一次 `--renew` 或保活会优先尝试该记录。不要为了消除报错直接删记录，应先确认目标权限已经恢复。存在无法确认取消是否发生的情况时，可能需要人工复核。
+
+此独立状态机已通过模拟故障回归，但尚未进行新版代码的真实重授权验收。9 月 21 日的实机记录属于桌面代理操作，不能代替这项验收。
+
+## 每小时保活
+
+```bash
+.venv/bin/python keepalive.py --config config.json
+```
+
+行为：双探针 → 850003 或 pending 恢复记录 → 有界 GUI 恢复 → 双探针复核。非授权错误只报告，不盲目点击 UI。通知需显式配置收件人与 bridge；相同状态六小时内抑制重复通知，状态恢复时通知。
+
+兼容入口仍可使用 `bash scripts/probe.sh` / `bash scripts/keepalive-run.sh`，都接受 `--config`。**其输出已改为单个 JSON，失败非零退出**，旧版解析 `read_errcode=...` 的调用方需迁移。
+
+编辑 `scripts/com.fyaic.wecomacl-renew.plist.example` 中的仓库路径，确认配置内 `venv_python` 正确，再安装：
 
 ```bash
 mkdir -p "$HOME/Library/LaunchAgents"
@@ -77,8 +106,6 @@ launchctl bootstrap "gui/$(id -u)" \
   "$HOME/Library/LaunchAgents/com.fyaic.wecomacl-renew.plist"
 ```
 
-查看 `/tmp/wecom-auth-renew-keepalive.log` 和配置中的日志。现有失败告警并不覆盖所有错误场景；小时调度不是可用性保证。
-
 停止调度：
 
 ```bash
@@ -86,4 +113,15 @@ launchctl bootout "gui/$(id -u)" \
   "$HOME/Library/LaunchAgents/com.fyaic.wecomacl-renew.plist"
 ```
 
-调用方自愈需要在业务项目中实现：遇到能力过期 → 有界恢复 → 验证 → 重试一次；追加/创建类写入还需业务去重。该钩子未包含在本仓库。
+日志目录由程序创建。状态使用原子替换与 0600 文件权限；同一 macOS 用户的 GUI 恢复共用生命周期锁，不按超时删除另一个进程的锁。异常直接终止时，操作系统释放锁，未完成预续期记录保留。
+
+## 命令与退出码
+
+| 退出码 | 含义 |
+|---|---|
+| 0 | 当前命令检查通过；不代表所有业务流程通过 |
+| 2 | 权限不健康、操作失败或无法可靠判断；无效命令行参数也使用 argparse 的标准退出码 2 |
+| 3 | 配置、平台或依赖问题 |
+| 4 | 另一个进程持有锁，等待超时 |
+
+正常执行与运行错误在 stdout 返回单个 JSON。`--help` 和命令行解析错误使用标准 argparse 输出。保活通知发送失败也返回非零，即使探针本身已经恢复。

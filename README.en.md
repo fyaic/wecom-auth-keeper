@@ -12,7 +12,7 @@ WeCom CLI can refresh its access token, but the business permissions granted to 
 
 This project uses an existing macOS WeCom session to detect expired permissions and interact with the authorization UI. It is a community project, not an official Tencent or WeCom integration.
 
-> **Experimental operations tool.** The repository implements renewal after expiry. Desktop automation has also demonstrated renewal *before* expiry by revoking and re-granting an existing permission, but that flow is not yet included in the standalone script. A logged-in, interactive Mac is required.
+> **Experimental operations tool.** The repository implements renewal after expiry. Desktop automation has also demonstrated renewal *before* expiry by revoking and re-granting an existing permission, and an experimental `--pre-renew --existing-window` state machine is now implemented. The new standalone implementation has not yet completed live reauthorization acceptance. A logged-in, interactive Mac is required.
 
 ## What works today?
 
@@ -20,7 +20,7 @@ This project uses an existing macOS WeCom session to detect expired permissions 
 |---|---|
 | CLI read/write probes | Implemented; production use reported by the author |
 | Renew expired permissions through the desktop UI | Implemented; successful recoveries reported by the author |
-| Revoke and re-grant before expiry | Demonstrated in a live desktop-agent session; not integrated into `renew.py` |
+| Revoke and re-grant before expiry | Demonstrated with a desktop agent; experimental existing-window state machine implemented |
 | Independent installation and multi-cycle unattended reliability | Planned |
 
 On September 21, 2026, live desktop automation extended a bot's document read permission from **September 22, 18:01 to September 28, 16:36**, and its write permission to **September 28, 16:39** (Asia/Shanghai). Both persisted after closing and reopening the authorization page. No QR scan or human click was needed. See the [validation record](docs/validation.md) for scope and limitations.
@@ -40,24 +40,27 @@ Revocation and reauthorization are separate operations. There is a temporary per
 ```bash
 git clone https://github.com/fyaic/wecom-auth-keeper.git
 cd wecom-auth-keeper
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
 cp config.example.json config.json
 ```
 
-Follow the [setup guide](docs/getting-started.md) to configure a bot, a dedicated probe spreadsheet and a working `wecom-bridge` Python environment. The core imports external bridge AX helpers; installing PyObjC alone is insufficient. Detailed operational documentation is currently in Chinese; English contributions are welcome.
+Follow the [setup guide](docs/getting-started.md) to configure a bot, a dedicated probe spreadsheet and the local Python environment. Native AX helpers are included; bridge is optional for link delivery, notifications and monitor coordination. Detailed operational documentation is currently in Chinese; English contributions are welcome.
 
-**`--check` is interactive, not side-effect-free:** it can send a link message, change bridge monitor mode, open/close a window and write local state. Set `bridge_send_link=false` to disable link delivery; an existing authorization link still needs to be visible in the target chat.
+`--doctor` checks local configuration/platform/dependencies without GUI access. `--check` never sends messages or changes authorization/monitor mode, but may open an existing link and writes local state. Add `--existing-window` to prohibit navigation. Experimental `--pre-renew` requires that flag, processes due permissions one at a time, and journals interrupted recovery.
 
 Run repository checks without WeCom or credentials:
 
 ```bash
 python3 scripts/check_repository.py
+python3 -m unittest discover -s tests -v
 ```
 
-These are syntax and repository checks, not live renewal tests. Read the [known limitations](docs/known-limitations.md) before deploying: the current script can report success for incomplete or unsuccessful results. Verify the affected CLI operations independently.
+Checks cover repository integrity, recovery state transitions and process boundaries, plus native AX value conversion when macOS dependencies are installed. They are not live reauthorization tests. Unknown states and failed renewal return nonzero exits. Keepalive requires both the GUI result and read/write API probes to pass; see [known limitations](docs/known-limitations.md).
 
 ## Help improve it
 
-The next priorities are reliable navigation, explicit unknown/failure states, independent dependency packaging and repeated expiry-cycle testing. See [Contributing](CONTRIBUTING.md) and the [roadmap](docs/roadmap.md).
+The next priorities are reliable navigation, independent live validation and repeated expiry-cycle testing. See [Contributing](CONTRIBUTING.md) and the [roadmap](docs/roadmap.md).
 
 Upstream context: [WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87) and [#134](https://github.com/WecomTeam/wecom-cli/issues/134). The seven-day behavior is an observation, not a guarantee about every account, capability or future platform version.
 
