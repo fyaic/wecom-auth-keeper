@@ -24,7 +24,7 @@ wecom-auth-keeper uses an existing macOS WeCom session to inspect permissions, i
 - **Recoverable interruptions:** process locks, atomic state, a pending-recovery journal and optional deduplicated notifications.
 
 > [!IMPORTANT]
-> Experimental operations tool. A logged-in, interactive Mac must remain available. Pre-expiry renewal succeeded in a live desktop-agent session; the new standalone implementation still needs live reauthorization and multi-cycle acceptance. See [Validation](#validation).
+> Experimental operations tool. A logged-in, interactive Mac must remain available. The standalone script has renewed document read/write and contacts permissions on a live account. Full navigation, business API checks and multi-cycle acceptance remain outstanding. See [Validation](#validation).
 
 ## Quick start
 
@@ -127,3 +127,13 @@ Help with **reliable navigation, client compatibility reports, live acceptance o
 This project grew out of permission failures in unattended WeCom document workflows. Upstream context: [WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87) and [#134](https://github.com/WecomTeam/wecom-cli/issues/134). Community maintained, not affiliated with Tencent or WeCom, and not an official renewal API.
 
 [MIT License](LICENSE) © 2026 fyaic
+
+### Selecting permissions
+
+Set `target_rows` to exact capability labels, for example:
+
+```json
+"target_rows": ["新建与编辑文档", "搜索与获取文档内容", "搜索企业成员"]
+```
+
+Only listed rows are operated on. Use only `搜索与获取文档内容` for document read access. This is a configuration whitelist, not a checkbox UI. An available grant button may also represent a never-granted permission: list only capabilities you intend to authorize. Keepalive business probes currently cover document read/write; contacts validation checks UI status and expiry.
