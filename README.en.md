@@ -69,9 +69,9 @@ Run from the repository directory. Operational results are JSON; see the [setup 
 | Probe, recover and verify | `.venv/bin/python keepalive.py --config config.json` |
 | Experimental pre-expiry renewal for permissions due within 24 hours | `.venv/bin/python renew.py --config config.json --pre-renew --existing-window --within-hours 24` |
 
-Expired-permission recovery can reuse an open permissions page or click a visible target authorization link in the current chat. **Pre-expiry renewal requires an already-open target page with the relevant controls visible.** Automatic management-list navigation and scrolling are not implemented. Revocation and re-granting create a temporary permission gap.
+Expired-permission recovery can reuse an open permissions page or click a visible target authorization link in the current chat. **Pre-expiry renewal requires an already-open target page.** The script scrolls target controls into view; automatic management-list navigation is not implemented. Revocation and re-granting create a temporary permission gap.
 
-After verifying a single run, follow the [setup guide](docs/getting-started.md) to install an hourly launchd job. Scheduling and business retries do not guarantee zero downtime.
+After verifying a single run, follow the [setup guide](docs/getting-started.md) to install an hourly launchd job. The job recovers after expiry; it does not automatically run `--pre-renew`. Scheduling and business retries do not guarantee zero downtime.
 
 ## How it works
 
@@ -88,12 +88,23 @@ flowchart LR
 
 GUI authorization and API availability are separate checks. Keepalive requires both renewal and read/write probes to pass. Network and other API failures are reported without blindly triggering GUI authorization.
 
+### Selecting permissions
+
+Set `target_rows` to exact capability labels, for example:
+
+```json
+"target_rows": ["新建与编辑文档", "搜索与获取文档内容", "搜索企业成员"]
+```
+
+Only listed rows are operated on. Use only `搜索与获取文档内容` for document read access. This is a configuration whitelist, not a checkbox UI. An available grant button may also represent a never-granted permission: list only capabilities you intend to authorize. Keepalive business probes currently cover document read/write; contacts validation checks UI status and expiry.
+
 ## Validation
 
 | Evidence | Confirmed | Not established |
 |---|---|---|
 | Original production implementation | Author-reported recovery on Sep 14 and Sep 21; the latter took 38s and 78s for the two permission lines | Reliability of the new implementation or success across accounts |
 | Sep 21 live desktop-agent session | Pre-expiry revoke/re-grant extended both document permissions by seven days; verified after reopening the page | Live reauthorization by the new standalone code |
+| Sep 22 standalone script | Document read/write and contacts renewed from Sep 22 18:39 to Sep 29 16:18; reopened-page verification passed | Business API checks, full navigation and multi-cycle operation |
 | Current automated regression suite | State classification, identity checks, interrupted recovery, process boundaries and native AX geometry; Linux/macOS CI | Full GUI navigation, live business operations or multi-cycle acceptance |
 
 Read the [evidence](docs/validation.md), [known limitations](docs/known-limitations.md) and [acceptance roadmap](docs/roadmap.md). The seven-day behavior is an observation, not a platform guarantee for every capability, account or future version.
@@ -104,6 +115,7 @@ Detailed operational guides are currently in Chinese. English documentation cont
 
 | Guide | Contents |
 |---|---|
+| [Temporary workaround](docs/workaround.md) | Prerequisites, reproduction, automation boundaries and upstream context |
 | [Setup](docs/getting-started.md) | Configuration, commands, pending recovery, scheduling and exit codes |
 | [Authorization model](docs/auth-model.md) | Token vs. capability authorization, historical observations and troubleshooting |
 | [Validation](docs/validation.md) | Live results and their scope |
@@ -120,20 +132,10 @@ Regression tests do not need a real account. With native dependencies installed 
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-Help with **reliable navigation, client compatibility reports, live acceptance of the new implementation and multi-cycle validation**. Read [Contributing](CONTRIBUTING.md), use the [issue templates](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose) for sanitized reproductions, and follow the [security policy](SECURITY.md) for sensitive reports.
+Help with **reliable navigation, client compatibility reports, independent live reproductions and multi-cycle validation**. Read [Contributing](CONTRIBUTING.md), use the [issue templates](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose) for sanitized reproductions, and follow the [security policy](SECURITY.md) for sensitive reports.
 
 ## Background and license
 
 This project grew out of permission failures in unattended WeCom document workflows. Upstream context: [WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87) and [#134](https://github.com/WecomTeam/wecom-cli/issues/134). Community maintained, not affiliated with Tencent or WeCom, and not an official renewal API.
 
 [MIT License](LICENSE) © 2026 fyaic
-
-### Selecting permissions
-
-Set `target_rows` to exact capability labels, for example:
-
-```json
-"target_rows": ["新建与编辑文档", "搜索与获取文档内容", "搜索企业成员"]
-```
-
-Only listed rows are operated on. Use only `搜索与获取文档内容` for document read access. This is a configuration whitelist, not a checkbox UI. An available grant button may also represent a never-granted permission: list only capabilities you intend to authorize. Keepalive business probes currently cover document read/write; contacts validation checks UI status and expiry.

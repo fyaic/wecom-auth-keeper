@@ -11,7 +11,7 @@
 
 **简体中文** · [English](README.en.md)
 
-[快速开始](#快速开始) · [命令参考](#命令参考) · [验证状态](#验证状态) · [完整文档](#完整文档) · [参与贡献](CONTRIBUTING.md)
+[快速开始](#快速开始) · [命令参考](#命令参考) · [验证状态](#验证状态) · [临时续期方案](docs/workaround.md) · [完整文档](#完整文档) · [参与贡献](CONTRIBUTING.md)
 
 ## 为什么需要它
 
@@ -69,9 +69,9 @@ cp config.example.json config.json
 | 完整保活：探测 → 恢复 → 复探 | `.venv/bin/python keepalive.py --config config.json` |
 | 实验性预续期：处理 24 小时内到期的权限 | `.venv/bin/python renew.py --config config.json --pre-renew --existing-window --within-hours 24` |
 
-到期恢复可复用已打开的权限页，或点击当前聊天中可见的目标授权链接。**预续期要求提前打开目标权限页，并让操作行处于可见位置**；管理列表自动导航和自动滚动尚未实现。取消与重授之间会有短暂未授权窗口。
+到期恢复可复用已打开的权限页，或点击当前聊天中可见的目标授权链接。**预续期要求提前打开目标权限页**；脚本会将目标控件滚动到可见位置，管理列表自动导航尚未实现。取消与重授之间会有短暂未授权窗口。
 
-确认单次运行符合预期后，可按[部署指南](docs/getting-started.md#每小时保活)安装每小时 launchd 任务。调度和业务重试无法保证零中断。
+确认单次运行符合预期后，可按[部署指南](docs/getting-started.md#每小时保活)安装每小时 launchd 任务。该任务执行到期后恢复，不会自动执行 `--pre-renew`。调度和业务重试无法保证零中断。
 
 ## 工作方式
 
@@ -114,6 +114,7 @@ GUI 显示成功和实际 API 可用是两层验证。保活要求恢复命令�
 | 文档 | 内容 |
 |---|---|
 | [部署指南](docs/getting-started.md) | 配置、命令、预续期恢复、调度、退出码 |
+| [临时续期方案](docs/workaround.md) | 适用条件、最小复现、自动化边界与上游讨论 |
 | [授权模型](docs/auth-model.md) | token 与能力授权的区别、历史取证和排障经验 |
 | [验证记录](docs/validation.md) | 实机结果及其适用范围 |
 | [已知限制](docs/known-limitations.md) | 当前边界与迁移注意事项 |
@@ -129,7 +130,7 @@ GUI 显示成功和实际 API 可用是两层验证。保活要求恢复命令�
 .venv/bin/python -m unittest discover -s tests -v
 ```
 
-欢迎贡献**稳定导航、客户端兼容性报告、新版实机验收与跨周期验证**。请先阅读[贡献指南](CONTRIBUTING.md)，通过 [Issue 模板](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose)提供脱敏复现；敏感问题请遵循[安全报告说明](SECURITY.md)。
+欢迎贡献**稳定导航、客户端兼容性报告、外部实机复现与跨周期验证**。请先阅读[贡献指南](CONTRIBUTING.md)，通过 [Issue 模板](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose)提供脱敏复现；敏感问题请遵循[安全报告说明](SECURITY.md)。
 
 ## 来源与许可
 

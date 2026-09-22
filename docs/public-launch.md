@@ -22,10 +22,11 @@ GitHub explains [community profiles](https://docs.github.com/en/communities/sett
 
 ## Before wider promotion
 
-- [ ] Merge reviewed repository documentation and check CI on the default branch.
+- [x] Merge repository documentation and verify Linux/macOS CI.
 - [x] Fix the known false-success and bot/window selection issues with regression coverage.
 - [x] Implement an experimental standalone existing-window pre-expiry state machine.
-- [ ] Complete live acceptance of that implementation and clean-Mac end-to-end deployment.
+- [x] Complete single-account existing-window live renewal of document read/write and contacts.
+- [ ] Complete clean-Mac deployment, business API revalidation and multi-cycle operation.
 - [ ] Capture a new, explicitly recorded demo; remove account names, bot IDs, links and enterprise content. Do not label a reenactment as the original live run.
 - [ ] Publish a versioned release with exact supported conditions and validation scope.
 - [ ] Add useful reproduction evidence to relevant upstream/community discussions when a maintainer chooses to share it. Avoid repetitive promotional posts.
@@ -34,9 +35,9 @@ GitHub explains [community profiles](https://docs.github.com/en/communities/sett
 
 我们在用 wecom-cli 做后台文档自动化时遇到一个问题：访问 token 能刷新，但业务能力授权会在七天后到期，任务因此中断。
 
-wecom-auth-keeper 尝试用 macOS 企业微信桌面自动化处理授权恢复。最近实机验证了未到期预续期：在“已授权”下拉中取消后重新授权，文档读写有效期都延长到七天后，重开页面复核一致。
+wecom-auth-keeper 尝试用 macOS 企业微信桌面自动化处理授权恢复。最近实机验证了未到期预续期：在“已授权”下拉中取消后重新授权，独立脚本将文档读写和通讯录三项有效期更新为操作时刻七天后，重开页面复核一致。
 
-当前仓库支持到期恢复脚本；预续期已有实验性现有窗口状态机，管理列表导航和新版真实账号验收仍待完成。欢迎有同类场景的开发者参与导航、状态验证和跨周期测试。
+当前仓库支持到期恢复脚本；预续期已有实验性现有窗口状态机，目标行自动滚动已实现，管理列表导航、业务 API 复探和跨周期验收仍待完成。欢迎有同类场景的开发者参与导航、状态验证和跨周期测试。
 
 https://github.com/fyaic/wecom-auth-keeper
 
@@ -44,7 +45,7 @@ https://github.com/fyaic/wecom-auth-keeper
 
 We built wecom-auth-keeper after seven-day business permission expiry interrupted our WeCom CLI document workflows. It uses macOS desktop automation to interact with the authorization UI.
 
-A live desktop-agent session has now demonstrated pre-expiry renewal: revoke an existing document permission, re-grant it, and verify a new seven-day expiry after reopening the page. The repository currently implements renewal after expiry; an experimental existing-window pre-expiry implementation is now available, with live acceptance and automatic management-page navigation still pending.
+The standalone script has demonstrated pre-expiry renewal of document read/write and contacts on an already-open permissions page, verified after reopening it. Controls scroll automatically. Navigation into that page was assisted; business API revalidation, clean-Mac deployment and multi-cycle operation remain pending. Hourly keepalive handles post-expiry recovery, not proactive renewal.
 
 We welcome reproducibility reports and contributions to navigation, state validation and multi-cycle testing.
 
