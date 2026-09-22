@@ -1,41 +1,36 @@
 # wecom-auth-keeper
 
-**Desktop-assisted permission renewal for WeCom CLI automations on macOS.**
+**Detect and recover expiring WeCom CLI business permissions on macOS.**
 
-[简体中文](README.md) · [Setup](docs/getting-started.md) · [Evidence](docs/validation.md) · [Roadmap](docs/roadmap.md) · [Contributing](CONTRIBUTING.md)
+A recovery path for reports, spreadsheet synchronization and agent workflows interrupted by seven-day permission expiry.
 
-![Platform: macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Status: experimental](https://img.shields.io/badge/status-experimental-orange)
+[![CI](https://github.com/fyaic/wecom-auth-keeper/actions/workflows/repository-checks.yml/badge.svg?branch=main)](https://github.com/fyaic/wecom-auth-keeper/actions/workflows/repository-checks.yml)
+![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-WeCom CLI can refresh its access token, but the business permissions granted to a bot expire separately. In our observations, document read and write permissions each have a seven-day authorization period. Continued API use does not extend it, which can interrupt scheduled reports, spreadsheet synchronization and agent workflows.
+[简体中文](README.md) · **English**
 
-This project uses an existing macOS WeCom session to detect expired permissions and interact with the authorization UI. It is a community project, not an official Tencent or WeCom integration.
+[Quick start](#quick-start) · [Commands](#commands) · [Validation](#validation) · [Documentation](#documentation) · [Contributing](CONTRIBUTING.md)
 
-> **Experimental operations tool.** The repository implements renewal after expiry. Desktop automation has also demonstrated renewal *before* expiry by revoking and re-granting an existing permission, and an experimental `--pre-renew --existing-window` state machine is now implemented. The new standalone implementation has not yet completed live reauthorization acceptance. A logged-in, interactive Mac is required.
+## Why this exists
 
-## What works today?
+**A refreshed access token does not mean a bot's business permissions are still valid.** In our WeCom deployment, document read and write permissions have independent seven-day authorization periods. Continued API use does not extend them; expired operations return `850003`.
 
-| Capability | Status |
-|---|---|
-| CLI read/write probes | Implemented; production use reported by the author |
-| Renew expired permissions through the desktop UI | Implemented; successful recoveries reported by the author |
-| Revoke and re-grant before expiry | Demonstrated with a desktop agent; experimental existing-window state machine implemented |
-| Independent installation and multi-cycle unattended reliability | Planned |
+wecom-auth-keeper uses an existing macOS WeCom session to inspect permissions, interact with the official authorization UI and verify recovery through CLI probes. Its native Accessibility adapter is included; no bridge source checkout is required.
 
-On September 21, 2026, live desktop automation extended a bot's document read permission from **September 22, 18:01 to September 28, 16:36**, and its write permission to **September 28, 16:39** (Asia/Shanghai). Both persisted after closing and reopening the authorization page. No QR scan or human click was needed. See the [validation record](docs/validation.md) for scope and limitations.
+- **Visible failures:** separate document read/write probes, structured JSON and nonzero failure exits.
+- **Verified targets:** bot identity checks before actions; incomplete or ambiguous page states stop the operation.
+- **Recoverable interruptions:** process locks, atomic state, a pending-recovery journal and optional deduplicated notifications.
 
-## How it works
+> [!IMPORTANT]
+> Experimental operations tool. A logged-in, interactive Mac must remain available. Pre-expiry renewal succeeded in a live desktop-agent session; the new standalone implementation still needs live reauthorization and multi-cycle acceptance. See [Validation](#validation).
 
-`launchd → CLI read/write probes → 850003 → desktop renewal → CLI verification → optional notification`
+## Quick start
 
-The pre-expiry route observed in the live session is:
+**Requirements:** macOS, Python 3.11+, a logged-in WeCom desktop client, and `wecom-cli` already authorized for the target bot. Desktop actions require macOS Accessibility permission.
 
-`Bot chat title → Manage → Bot list → Bot details → Available permissions → Authorized dropdown → Revoke → Authorize`
-
-Revocation and reauthorization are separate operations. There is a temporary permission gap; calling applications need coordination and retries.
-
-## Get started
+### 1. Install
 
 ```bash
 git clone https://github.com/fyaic/wecom-auth-keeper.git
@@ -45,23 +40,90 @@ python3 -m venv .venv
 cp config.example.json config.json
 ```
 
-Follow the [setup guide](docs/getting-started.md) to configure a bot, a dedicated probe spreadsheet and the local Python environment. Native AX helpers are included; bridge is optional for link delivery, notifications and monitor coordination. Detailed operational documentation is currently in Chinese; English contributions are welcome.
+### 2. Configure locally
 
-`--doctor` checks local configuration/platform/dependencies without GUI access. `--check` never sends messages or changes authorization/monitor mode, but may open an existing link and writes local state. Add `--existing-window` to prohibit navigation. Experimental `--pre-renew` requires that flag, processes due permissions one at a time, and journals interrupted recovery.
+Edit `config.json` using the [setup guide](docs/getting-started.md): set the target bot identifiers, probe spreadsheet IDs and the absolute path to this repository's `.venv/bin/python3`. CLI credentials must belong to the same bot.
 
-Run repository checks without WeCom or credentials:
+**The write probe overwrites cell A1 in the configured test sheet. Use a dedicated test spreadsheet.** Optional bridge link delivery, notifications and monitor coordination are disabled by default.
+
+### 3. Check your setup and permissions
 
 ```bash
-python3 scripts/check_repository.py
-python3 -m unittest discover -s tests -v
+# Local configuration/platform/dependency checks; no GUI access
+.venv/bin/python renew.py --config config.json --doctor
+
+# First open the target bot's permissions page in WeCom
+.venv/bin/python renew.py --config config.json --check --existing-window
 ```
 
-Checks cover repository integrity, recovery state transitions and process boundaries, plus native AX value conversion when macOS dependencies are installed. They are not live reauthorization tests. Unknown states and failed renewal return nonzero exits. Keepalive requires both the GUI result and read/write API probes to pass; see [known limitations](docs/known-limitations.md).
+`--check` does not grant/revoke permissions, send messages or change monitor mode. It writes local state and reports healthy only when page identity and complete permission states can be verified.
 
-## Help improve it
+## Commands
 
-The next priorities are reliable navigation, independent live validation and repeated expiry-cycle testing. See [Contributing](CONTRIBUTING.md) and the [roadmap](docs/roadmap.md).
+Run from the repository directory. Operational results are JSON; see the [setup guide](docs/getting-started.md) for exit codes and migration details.
 
-Upstream context: [WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87) and [#134](https://github.com/WecomTeam/wecom-cli/issues/134). The seven-day behavior is an observation, not a guarantee about every account, capability or future platform version.
+| Purpose | Command |
+|---|---|
+| Probe read/write operations, writing to the dedicated test sheet | `.venv/bin/python probe.py --config config.json` |
+| Recover expired permissions | `.venv/bin/python renew.py --config config.json --renew` |
+| Probe, recover and verify | `.venv/bin/python keepalive.py --config config.json` |
+| Experimental pre-expiry renewal for permissions due within 24 hours | `.venv/bin/python renew.py --config config.json --pre-renew --existing-window --within-hours 24` |
+
+Expired-permission recovery can reuse an open permissions page or click a visible target authorization link in the current chat. **Pre-expiry renewal requires an already-open target page with the relevant controls visible.** Automatic management-list navigation and scrolling are not implemented. Revocation and re-granting create a temporary permission gap.
+
+After verifying a single run, follow the [setup guide](docs/getting-started.md) to install an hourly launchd job. Scheduling and business retries do not guarantee zero downtime.
+
+## How it works
+
+```mermaid
+flowchart LR
+    A[CLI read/write probes] --> B{850003 or pending recovery?}
+    B -->|Yes| C[Verify target authorization page]
+    C --> D[Restore permission]
+    D --> E[Repeat CLI probes]
+    B -->|No| F[Report probe status]
+    E --> G[Record result and optionally notify]
+    F --> G
+```
+
+GUI authorization and API availability are separate checks. Keepalive requires both renewal and read/write probes to pass. Network and other API failures are reported without blindly triggering GUI authorization.
+
+## Validation
+
+| Evidence | Confirmed | Not established |
+|---|---|---|
+| Original production implementation | Author-reported recovery on Sep 14 and Sep 21; the latter took 38s and 78s for the two permission lines | Reliability of the new implementation or success across accounts |
+| Sep 21 live desktop-agent session | Pre-expiry revoke/re-grant extended both document permissions by seven days; verified after reopening the page | Live reauthorization by the new standalone code |
+| Current automated regression suite | State classification, identity checks, interrupted recovery, process boundaries and native AX geometry; Linux/macOS CI | Full GUI navigation, live business operations or multi-cycle acceptance |
+
+Read the [evidence](docs/validation.md), [known limitations](docs/known-limitations.md) and [acceptance roadmap](docs/roadmap.md). The seven-day behavior is an observation, not a platform guarantee for every capability, account or future version.
+
+## Documentation
+
+Detailed operational guides are currently in Chinese. English documentation contributions are welcome.
+
+| Guide | Contents |
+|---|---|
+| [Setup](docs/getting-started.md) | Configuration, commands, pending recovery, scheduling and exit codes |
+| [Authorization model](docs/auth-model.md) | Token vs. capability authorization, historical observations and troubleshooting |
+| [Validation](docs/validation.md) | Live results and their scope |
+| [Known limitations](docs/known-limitations.md) | Current boundaries and migration notes |
+| [Roadmap](docs/roadmap.md) | Next work and acceptance criteria |
+| [Changelog](CHANGELOG.md) | Behavior and compatibility changes |
+
+## Development and contributions
+
+Regression tests do not need a real account. With native dependencies installed on macOS, they also exercise AX value conversion.
+
+```bash
+.venv/bin/python scripts/check_repository.py
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+Help with **reliable navigation, client compatibility reports, live acceptance of the new implementation and multi-cycle validation**. Read [Contributing](CONTRIBUTING.md), use the [issue templates](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose) for sanitized reproductions, and follow the [security policy](SECURITY.md) for sensitive reports.
+
+## Background and license
+
+This project grew out of permission failures in unattended WeCom document workflows. Upstream context: [WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87) and [#134](https://github.com/WecomTeam/wecom-cli/issues/134). Community maintained, not affiliated with Tencent or WeCom, and not an official renewal API.
 
 [MIT License](LICENSE) © 2026 fyaic
