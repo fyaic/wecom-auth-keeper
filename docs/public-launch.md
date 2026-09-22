@@ -1,6 +1,6 @@
 # Public launch preparation
 
-This is a publication checklist and draft copy, not a claim that a release or promotion has happened.
+Publication checklist and reusable announcement copy. Upstream replies are recorded below; no versioned release is claimed.
 
 ## Positioning
 
@@ -29,7 +29,7 @@ GitHub explains [community profiles](https://docs.github.com/en/communities/sett
 - [ ] Complete clean-Mac deployment, business API revalidation and multi-cycle operation.
 - [ ] Capture a new, explicitly recorded demo; remove account names, bot IDs, links and enterprise content. Do not label a reenactment as the original live run.
 - [ ] Publish a versioned release with exact supported conditions and validation scope.
-- [ ] Add useful reproduction evidence to relevant upstream/community discussions when a maintainer chooses to share it. Avoid repetitive promotional posts.
+- [x] Share targeted reproduction evidence in upstream #138 and #134 (2026-09-22).
 
 ## Draft announcement (中文)
 
@@ -50,3 +50,11 @@ The standalone script has demonstrated pre-expiry renewal of document read/write
 We welcome reproducibility reports and contributions to navigation, state validation and multi-cycle testing.
 
 https://github.com/fyaic/wecom-auth-keeper
+
+
+## Published upstream replies — 2026-09-22
+
+- [wecom-cli #138: temporary desktop workaround and prerequisites](https://github.com/WecomTeam/wecom-cli/issues/138#issuecomment-5773557352)
+- [wecom-cli #134: document read/write renewal evidence and verification limits](https://github.com/WecomTeam/wecom-cli/issues/134#issuecomment-5773558029)
+
+Both replies disclose the community project relationship, distinguish UI expiry renewal from business API verification, and retain the request for official permission observability and renewal support. Message permission renewal was not tested and is not claimed.
