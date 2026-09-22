@@ -2,12 +2,22 @@
   "bot_chat_name": "<机器人会话名，如：XX的询价登记bot>",
   "aibotid": "<数字bot id，从续期链接 aibotid= 参数取>",
   "str_aibotid": "<字符串bot id，从续期链接 str_aibotid= 参数取>",
-  "target_rows": ["新建与编辑文档", "搜索与获取文档内容"],
+  "target_rows": [
+    "新建与编辑文档",
+    "搜索与获取文档内容"
+  ],
+  "read_docid": "<读探针使用的在线表格 docid>",
+  "write_docid": "<写探针使用的专用测试表 docid，勿填业务表>",
+  "write_sheet": "<专用测试表的子表 ID>",
   "bridge_url": "http://127.0.0.1:23392",
-  "bridge_send_link": true,
-  "wecom_bridge_src": "/Users/admin/Projects/wecom-bridge/src",
-  "venv_python": "/Users/admin/Projects/wecom-bridge/.venv/bin/python3",
+  "bridge_send_link": false,
+  "venv_python": "/absolute/path/to/wecom-auth-keeper/.venv/bin/python3",
   "state_file": "~/.wecom-auth-renew/state.json",
   "log_file": "~/.wecom-auth-renew/renew.log",
-  "notify_to": "<接收续期通知的成员名，如：张三>"
+  "notify_to": "",
+  "wecom_cli": "wecom-cli",
+  "bridge_monitor": false,
+  "probe_timeout": 30,
+  "renew_timeout": 240,
+  "lock_wait": 10
 }

@@ -2,3 +2,12 @@ config.json
 state.json
 *.log
 __pycache__/
+.venv/
+.env
+.env.*
+!.env.example
+*.local.json
+*.pending.json
+*.notice.json
+*.keepalive.lock
+.DS_Store
