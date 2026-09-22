@@ -58,3 +58,14 @@ https://github.com/fyaic/wecom-auth-keeper
 - [wecom-cli #134: document read/write renewal evidence and verification limits](https://github.com/WecomTeam/wecom-cli/issues/134#issuecomment-5773558029)
 
 Both replies disclose the community project relationship, distinguish UI expiry renewal from business API verification, and retain the request for official permission observability and renewal support. Message permission renewal was not tested and is not claimed.
+
+
+## External community follow-up — 2026-09-22
+
+Published and verified: [shiliai/dsh-plugins #53 — authorization monitoring and renewal](https://github.com/shiliai/dsh-plugins/issues/53#issuecomment-5773806927).
+
+The issue explicitly reports a one-week authorization lifetime. Its completed watchdog work covers token/connection failures and 90-day data-permission reminders. Our follow-up adds evidence for the separate seven-day bot capability authorization layer and links the [temporary desktop workaround](workaround.md), without claiming to replace that watchdog or the 90-day callback flow.
+
+The reply discloses our relationship to this project and the tested document read/write and contacts scope. It states that an interactive, logged-in Mac and an already-open target permissions page are required, revocation creates a temporary permission gap, and business API revalidation and multi-cycle operation remain unverified.
+
+Searches covered GitHub Issues and Discussions using Chinese and English terms for WeCom CLI, authorization expiry, renewal, seven-day permissions and `850003`. Other inspected threads concerned document-reader integration, token refresh, message history or WebSocket bridges rather than this renewal need; no promotional replies were posted there. Previously answered upstream issues were not posted to again. This search is a dated snapshot, not an exhaustive inventory or an ongoing monitor.
