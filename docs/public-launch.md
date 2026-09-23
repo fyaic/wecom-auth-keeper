@@ -69,3 +69,11 @@ The issue explicitly reports a one-week authorization lifetime. Its completed wa
 The reply discloses our relationship to this project and the tested document read/write and contacts scope. It states that an interactive, logged-in Mac and an already-open target permissions page are required, revocation creates a temporary permission gap, and business API revalidation and multi-cycle operation remain unverified.
 
 Searches covered GitHub Issues and Discussions using Chinese and English terms for WeCom CLI, authorization expiry, renewal, seven-day permissions and `850003`. Other inspected threads concerned document-reader integration, token refresh, message history or WebSocket bridges rather than this renewal need; no promotional replies were posted there. Previously answered upstream issues were not posted to again. This search is a dated snapshot, not an exhaustive inventory or an ongoing monitor.
+
+
+## Official status and follow-up — 2026-09-23
+
+- [Official support review](official-status.md): npm 1.3.2, official documentation and pinned source review found no documented unattended renewal path for seven-day capability grants. Token refresh remains distinct.
+- Published and verified [wecom-cli #87 follow-up](https://github.com/WecomTeam/wecom-cli/issues/87#issuecomment-5788396913): current auth command/refresh implementation and the community experiment. The reply explicitly states that message permission renewal has not been live-tested.
+- Searched issues mentioning wecom-cli and reviewed downstream integration threads. No additional external thread with a confirmed expiry requirement was found in this pass; existing replies in #138, #134 and dsh-plugins #53 were not repeated.
+- Excluded [wecom-openclaw-plugin #148](https://github.com/WecomTeam/wecom-openclaw-plugin/issues/148) (forbidden MCP tool, no expiry evidence), [#28](https://github.com/WecomTeam/wecom-openclaw-plugin/issues/28) (document membership), [pi #184](https://github.com/TGYD-helige/pi/issues/184) (resolved command/skill compatibility, Windows), and [CowAgent #2866](https://github.com/zhayujie/CowAgent/issues/2866) (MCP/CLI integration inquiry). These are not demonstrated fixes for this project's desktop renewal path.

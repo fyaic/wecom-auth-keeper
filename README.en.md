@@ -115,6 +115,7 @@ Detailed operational guides are currently in Chinese. English documentation cont
 
 | Guide | Contents |
 |---|---|
+| [Official support review](docs/official-status.md) | Dated review of official releases, source, documentation and issue responses |
 | [Temporary workaround](docs/workaround.md) | Prerequisites, reproduction, automation boundaries and upstream context |
 | [Setup](docs/getting-started.md) | Configuration, commands, pending recovery, scheduling and exit codes |
 | [Authorization model](docs/auth-model.md) | Token vs. capability authorization, historical observations and troubleshooting |

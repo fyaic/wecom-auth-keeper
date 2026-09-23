@@ -114,6 +114,7 @@ GUI 显示成功和实际 API 可用是两层验证。保活要求恢复命令�
 | 文档 | 内容 |
 |---|---|
 | [部署指南](docs/getting-started.md) | 配置、命令、预续期恢复、调度、退出码 |
+| [官方支持核查](docs/official-status.md) | 2026-09-23 官方版本、源码、文档与 issue 状态 |
 | [临时续期方案](docs/workaround.md) | 适用条件、最小复现、自动化边界与上游讨论 |
 | [授权模型](docs/auth-model.md) | token 与能力授权的区别、历史取证和排障经验 |
 | [验证记录](docs/validation.md) | 实机结果及其适用范围 |
