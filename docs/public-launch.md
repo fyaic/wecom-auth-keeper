@@ -77,3 +77,14 @@ Searches covered GitHub Issues and Discussions using Chinese and English terms f
 - Published and verified [wecom-cli #87 follow-up](https://github.com/WecomTeam/wecom-cli/issues/87#issuecomment-5788396913): current auth command/refresh implementation and the community experiment. The reply explicitly states that message permission renewal has not been live-tested.
 - Searched issues mentioning wecom-cli and reviewed downstream integration threads. No additional external thread with a confirmed expiry requirement was found in this pass; existing replies in #138, #134 and dsh-plugins #53 were not repeated.
 - Excluded [wecom-openclaw-plugin #148](https://github.com/WecomTeam/wecom-openclaw-plugin/issues/148) (forbidden MCP tool, no expiry evidence), [#28](https://github.com/WecomTeam/wecom-openclaw-plugin/issues/28) (document membership), [pi #184](https://github.com/TGYD-helige/pi/issues/184) (resolved command/skill compatibility, Windows), and [CowAgent #2866](https://github.com/zhayujie/CowAgent/issues/2866) (MCP/CLI integration inquiry). These are not demonstrated fixes for this project's desktop renewal path.
+
+
+## Downstream scheduled-notification discussion — 2026-09-23
+
+Published and verified: [LazyAGI/LazyMind #758 — scheduled multi-channel notifications](https://github.com/LazyAGI/LazyMind/pull/758#issuecomment-5788505443).
+
+The open PR discusses WeCom CLI provider rejection classification and login renewal. Its `wecom/service.py` handles outer/inner `853004` with token refresh, while other business errors become a generic request failure. The reply suggests retaining a sanitized capability-reauthorization reason for `850003` and adding regression cases for both response envelopes. It is a prospective integration consideration, not a claim that LazyMind has a reproduced expiry failure.
+
+The comment links this community project as an optional desktop recovery reference, discloses maintainership, and explicitly excludes verified LazyMind integration, message-permission renewal and Compose/Linux compatibility. No second reply was added to earlier upstream/community threads.
+
+This pass expanded searches to authorization expiry, weekly operation, CLI failures and scheduled workflows across Issues, PR discussions and GitHub Discussions. Generic OAuth, trial tokens and unrelated integration topics were not treated as evidence of this specific renewal need.
