@@ -88,3 +88,17 @@ The open PR discusses WeCom CLI provider rejection classification and login rene
 The comment links this community project as an optional desktop recovery reference, discloses maintainership, and explicitly excludes verified LazyMind integration, message-permission renewal and Compose/Linux compatibility. No second reply was added to earlier upstream/community threads.
 
 This pass expanded searches to authorization expiry, weekly operation, CLI failures and scheduled workflows across Issues, PR discussions and GitHub Discussions. Generic OAuth, trial tokens and unrelated integration topics were not treated as evidence of this specific renewal need.
+
+
+## Downstream adoption and further outreach — 2026-09-23
+
+LazyMind's PR author [confirmed adopting the error-classification suggestion](https://github.com/LazyAGI/LazyMind/pull/758#issuecomment-5789451671). We inspected [commit e8fe3d76](https://github.com/LazyAGI/LazyMind/commit/e8fe3d7693e413c03f3a3e972b98161a24c311d9): both `850003` response envelopes map to `WECOM_CAPABILITY_REAUTH_REQUIRED`, the worker preserves that reason, and Chinese/English UI text asks for reauthorization. Regression cases assert a failed result, sanitized diagnostics and exactly one send attempt. The author reports 233 passing gateway tests; we reviewed the diff but did not independently run their suite. This is adoption of error handling advice, not integration or validation of this project's renewal runtime. Published and verified our [acknowledgment](https://github.com/LazyAGI/LazyMind/pull/758#issuecomment-5790074053).
+
+Two additional directly relevant discussions received tailored replies:
+
+- [CoreMan #50](https://github.com/wxkingstar/CoreMan/pull/50#issuecomment-5790074587): the merged PR documents per-member capability grants, seven-day expiry reminders and desktop-only renewal. Our reply offers the experiment for a member's own logged-in Mac, emphasizes robot identity and explicit permission selection, and does not suggest one shared desktop can renew every member's grants. CoreMan integration remains unverified.
+- [agentcore-notifier #7](https://github.com/cloud2ai/agentcore-notifier/pull/7#issuecomment-5790075049): the merged PR reports actual seven-day message authorization expiry followed by repeated send failures and adds a self-built-app channel. Our reply acknowledges that approach and offers this experiment only as a reference for remaining AI Bot users. Message permission renewal and notifier integration remain untested.
+
+Both replies disclose project maintainership and link the reproduction guide. They retain the interactive-Mac and preopened-page requirements, temporary revocation gap, and pending business API/multi-cycle verification. Published bodies were read back through the GitHub API and compared with their drafts.
+
+Searches also covered `850003`, seven-day grants and recent Chinese authorization-expiry discussions across issues and PR comments. HoeTee/wecom-aibot #5 mentions stopping on expiry, but received no reply in this pass; broad token/integration matches were not used for outreach. This record is a dated search snapshot, not an ongoing monitor.
