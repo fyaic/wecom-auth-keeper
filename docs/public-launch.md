@@ -118,3 +118,18 @@ This pass searched Chinese/English renewal, reauthorization, seven-day and `8500
 - awesome-dsh-plugin/awesome-dsh-plugin #1191 concerns listing accuracy and approval identity checks.
 
 Previously contacted threads were not reposted to. This is a bounded search snapshot; it does not establish that all relevant discussions have been found.
+
+
+## Joint Gateway / Auth Keeper article — 2026-09-23
+
+Prepared [a Chinese community article](agent-to-wecom-story.md) introducing Gateway as the Agent-to-WeCom middleware and Auth Keeper as an optional desktop experiment for selected business capability grants. It explicitly distinguishes supported reference Adapters from arbitrary plug-and-play compatibility, basic Bot chat from CLI business authorization, and complementary projects from a tested integrated suite.
+
+Suggested title for a standalone community post:
+
+> 把已有 Agent 接入企业微信，再处理七天授权到期：两个开源项目的实践
+
+Short introduction for a relevant discussion, after checking its context:
+
+> 我们维护了两个互补的开源项目：[wecom-agent-gateway](https://github.com/fyaic/wecom-agent-gateway) 把已有 Agent 接入企业微信，Codex、Kimi、Pi、OpenClaw 有真实接入记录，自研 Agent 可通过 Adapter 扩展；[wecom-auth-keeper](https://github.com/fyaic/wecom-auth-keeper) 则实验性地通过 macOS 授权界面维护指定业务权限，已实测文档读写和通讯录的界面有效期更新。基础聊天不需要 Auth Keeper；续期仍需已登录 Mac 和预开的正确权限页，业务 API 复探、消息权限和跨周期运行尚未验收。两个项目还没有完成组合后的端到端续期验证。[完整实践与边界](agent-to-wecom-story.md)。
+
+The article is available in this repository. No Linux.do, V2EX, Zhihu, Juejin or X publication is recorded by this entry; preparing copy is not a confirmed external publication.
