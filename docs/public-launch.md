@@ -102,3 +102,19 @@ Two additional directly relevant discussions received tailored replies:
 Both replies disclose project maintainership and link the reproduction guide. They retain the interactive-Mac and preopened-page requirements, temporary revocation gap, and pending business API/multi-cycle verification. Published bodies were read back through the GitHub API and compared with their drafts.
 
 Searches also covered `850003`, seven-day grants and recent Chinese authorization-expiry discussions across issues and PR comments. HoeTee/wecom-aibot #5 mentions stopping on expiry, but received no reply in this pass; broad token/integration matches were not used for outreach. This record is a dated search snapshot, not an ongoing monitor.
+
+
+## Document-workflow recovery follow-up — 2026-09-23
+
+Published and verified: [HoeTee/wecom-aibot #5](https://github.com/HoeTee/wecom-aibot/pull/5#issuecomment-5790221478). The PR explicitly stops on `850003` instead of looping; its README describes document/smart-sheet workflows using a remote MCP endpoint. Our reply preserves that fail-fast behavior and suggests checking the previous write outcome before replaying an append.
+
+The reply discloses maintainership and links the desktop experiment, but explicitly distinguishes their remote MCP path from our tested CLI path. Matching error codes alone do not prove a shared authorization object: the operator must first establish that the MCP uses the same bot and desktop-managed grants. No integration or post-renewal smart-sheet write has been verified. Interactive macOS, an already-open correct permissions page, the temporary revocation gap and pending API/multi-cycle verification remain stated limitations. The published comment was fetched and matched against its draft.
+
+This pass searched Chinese/English renewal, reauthorization, seven-day and `850003` terms in issue bodies and comments, including PR discussions. Additional inspected candidates received no comment:
+
+- WecomTeam/wecom-unified #6/#7 and desirecore/market #136 discuss chat-history windows and corporation/document access boundaries, not demonstrated grant renewal needs.
+- tobby888/Photolib #73 implements self-built-app access-token refresh; multica-ai/multica #6590 handles WebSocket acknowledgments.
+- GnaixEuy/threadferry #10 concerns migration to per-agent bot credentials; CherryHQ/cherry-studio-app #917 describes gateway integration/token renewal without a demonstrated seven-day expiry report.
+- awesome-dsh-plugin/awesome-dsh-plugin #1191 concerns listing accuracy and approval identity checks.
+
+Previously contacted threads were not reposted to. This is a bounded search snapshot; it does not establish that all relevant discussions have been found.
