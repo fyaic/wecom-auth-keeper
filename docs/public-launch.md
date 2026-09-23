@@ -142,3 +142,15 @@ Submitted [把 Codex、Pi 接入企业微信，顺手试了七天权限续期](h
 The [submitted body](juejin-community-article.md) uses short paragraphs, three comparison/results tables, the existing real Gateway/Pi GIF, a high-resolution demo link and a text flow diagram. Category: 人工智能; tag: Agent. It includes both project links, explicit verification limits and an AI-assisted preparation disclosure. The author page was read back to confirm the title, tables and outbound links. No new live renewal test was performed for this article.
 
 Linux.do was excluded after reading its current guidelines: open-source promotional posts prohibit AI-generated or AI-polished text. No post was submitted there.
+
+
+## Agent integration outreach — 2026-09-23
+
+Published and read-back verified two Gateway-specific replies:
+
+- [Cherry Studio #15169](https://github.com/CherryHQ/cherry-studio/issues/15169#issuecomment-5792433525): the open request asks for native WeCom and DingTalk channels. We offered the official-Bot-SDK transport and external Agent Adapter as implementation references, distinguishing API/long-connection Bot credentials from a group webhook. The comment explicitly excludes completed CherryClaw integration, DingTalk and multi-channel/attachment parity; it states current macOS/Linux and at-least-once limits.
+- [D’AUBE Agent Bridge #14](https://github.com/daubesonntag-dotcom/daube-agent-bridge/issues/14#issuecomment-5792434037): the open issue requests a portable conversation/transport contract. We linked the local Echo fixture and public-SDK-only Adapter example, discussed keeping execution ownership in the Agent and distinguishing local delivery state from recipient acknowledgement. D’AUBE integration, additional messaging providers and its attachment provenance/digest acceptance criteria are not claimed.
+
+Both comments disclose maintainership. Auth Keeper was not promoted in these threads because neither demonstrates a capability-renewal requirement. Existing answered discussions were not reposted to.
+
+Also inspected OpenClaw #141346: its current discussion already distinguishes durable SDK sends, conversation-operation records and unresolved ID-less transport acceptance. Our independent Gateway does not establish a fix for that contract or its Windows setup, so no reply was added. Additional renewal searches returned mostly previously contacted threads and token/session-expiry results; this pass found no new confirmed seven-day renewal thread.
