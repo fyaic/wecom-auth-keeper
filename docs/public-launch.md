@@ -133,3 +133,12 @@ Short introduction for a relevant discussion, after checking its context:
 > 我们维护了两个互补的开源项目：[wecom-agent-gateway](https://github.com/fyaic/wecom-agent-gateway) 把已有 Agent 接入企业微信，Codex、Kimi、Pi、OpenClaw 有真实接入记录，自研 Agent 可通过 Adapter 扩展；[wecom-auth-keeper](https://github.com/fyaic/wecom-auth-keeper) 则实验性地通过 macOS 授权界面维护指定业务权限，已实测文档读写和通讯录的界面有效期更新。基础聊天不需要 Auth Keeper；续期仍需已登录 Mac 和预开的正确权限页，业务 API 复探、消息权限和跨周期运行尚未验收。两个项目还没有完成组合后的端到端续期验证。[完整实践与边界](agent-to-wecom-story.md)。
 
 The article is available in this repository. No Linux.do, V2EX, Zhihu, Juejin or X publication is recorded by this entry; preparing copy is not a confirmed external publication.
+
+
+## Juejin submission — 2026-09-23
+
+Submitted [把 Codex、Pi 接入企业微信，顺手试了七天权限续期](https://juejin.cn/spost/7688401277181345842) through the signed-in author UI. The platform displayed publication success; the author article page then displayed **审核中 (under review)**. This is a confirmed submission, not confirmation of public approval or discoverability.
+
+The [submitted body](juejin-community-article.md) uses short paragraphs, three comparison/results tables, the existing real Gateway/Pi GIF, a high-resolution demo link and a text flow diagram. Category: 人工智能; tag: Agent. It includes both project links, explicit verification limits and an AI-assisted preparation disclosure. The author page was read back to confirm the title, tables and outbound links. No new live renewal test was performed for this article.
+
+Linux.do was excluded after reading its current guidelines: open-source promotional posts prohibit AI-generated or AI-polished text. No post was submitted there.
