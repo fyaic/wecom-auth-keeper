@@ -1,5 +1,6 @@
 """Small native AX adapter. No bridge imports, configuration or network access."""
 import time
+from keeper_common import KeeperError
 from AppKit import NSWorkspace
 from ApplicationServices import (
     AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
@@ -64,11 +65,17 @@ def click(element, window):
 
 def application():
     if not AXIsProcessTrusted():
-        raise RuntimeError("Accessibility permission unavailable")
+        # Check in this exact process, without prompting or attempting to grant
+        # access. A terminal's permission is not proof about a launchd child.
+        raise KeeperError("accessibility_permission_unavailable", "Accessibility access is unavailable to this process", 3)
     apps = [a for a in NSWorkspace.sharedWorkspace().runningApplications() if a.bundleIdentifier() == "com.tencent.WeWorkMac"]
+    if not apps:
+        raise KeeperError("wecom_not_running", "No running WeCom application was found", 3)
     apps = [a for a in apps if ax_get(AXUIElementCreateApplication(a.processIdentifier()), "AXWindows")]
-    if len(apps) != 1:
-        raise RuntimeError("Expected one running WeCom application")
+    if not apps:
+        raise KeeperError("wecom_window_unavailable", "No WeCom window is accessible in this session")
+    if len(apps) > 1:
+        raise KeeperError("wecom_multiple_instances", "Multiple windowed WeCom instances are accessible")
     return apps[0], AXUIElementCreateApplication(apps[0].processIdentifier())
 
 
