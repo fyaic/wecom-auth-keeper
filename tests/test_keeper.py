@@ -56,6 +56,9 @@ class FakeAX:
     def frame(self, element): return element.get('_frame')
     def application(self): return object(), self.app
     def activate(self, app): pass
+    def ax_perform(self, element, action):
+        self.app['AXFocusedWindow'] = element
+        return 0
     def click(self, element, window):
         name, text = element.get('_row'), element['AXTitle']
         self.clicks.append((text, name))
