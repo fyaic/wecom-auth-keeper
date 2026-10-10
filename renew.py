@@ -130,12 +130,45 @@ class Renewal:
             raise KeeperError("ambiguous_window", "Close duplicate authorization windows first")
         return valid[0] if valid else None
 
+    def focus_window(self, native, window, error="link_not_visible"):
+        self.ax.activate(native)
+        if self.ax.ax_perform(window, "AXRaise") != 0:
+            raise KeeperError(error, "Could not raise the target native window")
+        self.wait(lambda: self.ax.ax_get(self.app, "AXFocusedWindow"), lambda focused: focused == window,
+                  error, timeout=3)
+
+    def contains(self, outer, inner):
+        if not outer or not inner:
+            return False
+        x, y, w, h = inner
+        ox, oy, ow, oh = outer
+        return w > 0 and h > 0 and ow > 0 and oh > 0 and ox <= x and oy <= y and x + w <= ox + ow and y + h <= oy + oh
+
+    def visible_links(self, windows):
+        links = []
+        for window in windows:
+            stack, total = [(window, 0, [self.ax.frame(window)])], 0
+            while stack:
+                node, depth, clips = stack.pop()
+                total += 1
+                if total > 5000 or depth > 40:
+                    raise KeeperError("tree_incomplete", "Accessibility tree exceeds inspection limits")
+                role = self.ax.ax_get(node, "AXRole")
+                if role == "AXScrollArea":
+                    clips = [*clips, self.ax.frame(node)]
+                if role == "AXLink" and self.matches(node):
+                    bounds = self.ax.frame(node)
+                    if bounds and all(self.contains(clip, bounds) for clip in clips):
+                        links.append((bounds[1], node, window))
+                stack.extend((n, depth + 1, clips) for n in self.ax.ax_get(node, "AXChildren") or [])
+        return links
+
     def open(self, existing_only=False, send_link=False, activate=False):
         native, self.app = self.ax.application()
         current = self.select_window()
         if current is not None:
             if activate:
-                self.ax.activate(native)
+                self.focus_window(native, current, "page_not_open")
             return current
         if existing_only:
             raise KeeperError("page_not_open", "Open the target bot's permissions page first")
@@ -150,15 +183,18 @@ class Renewal:
                 raise KeeperError("link_delivery_failed", "Bridge did not confirm link delivery")
         self.ax.activate(native)
         self.sleep(1)
-        links = []
-        for win in self.ax.ax_get(self.app, "AXWindows") or []:
-            for node in self.walk(win):
-                if self.ax.ax_get(node, "AXRole") == "AXLink" and self.matches(node):
-                    bounds = self.ax.frame(node)
-                    if bounds:
-                        links.append((bounds[1], node, win))
+        links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
         if not links:
             raise KeeperError("link_not_visible", "Open the target chat and make its authorization link visible")
+        _, _, chat = max(links, key=lambda item: item[0])
+        self.focus_window(native, chat)
+        # Never click a stale node or a background-window coordinate. Re-read
+        # the selected window and all scroll clipping after it has been raised.
+        if chat not in (self.ax.ax_get(self.app, "AXWindows") or []):
+            raise KeeperError("link_not_visible", "Target link window disappeared")
+        links = self.visible_links([chat])
+        if not links:
+            raise KeeperError("link_not_visible", "Verified link is no longer visible")
         _, link, chat = max(links, key=lambda item: item[0])
         self.ax.click(link, chat)
         return self.wait(self.select_window, lambda value: value is not None, "page_not_open")
