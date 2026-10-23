@@ -20,5 +20,12 @@
   "bridge_monitor": false,
   "probe_timeout": 30,
   "renew_timeout": 240,
-  "lock_wait": 10
+  "lock_wait": 10,
+  "maintenance": {
+    "within_hours": 24,
+    "interval_seconds": 3600,
+    "min_renew_interval_seconds": 3600,
+    "retry_seconds": 300,
+    "close_window": true
+  }
 }

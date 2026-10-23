@@ -26,6 +26,14 @@ wecom-auth-keeper uses an existing macOS WeCom session to inspect permissions, i
 > [!IMPORTANT]
 > Experimental operations tool. A logged-in, interactive Mac must remain available. The standalone script has renewed document read/write and contacts permissions on a live account. On October 23, a launchd script autonomously navigated chat history and pre-renewed message permission, followed by a separate same-Bot read-only API probe. The new path was tested only on Chinese WeCom **5.0.12.95037**; older-client compatibility, other devices and multi-cycle operation remain unverified. See [compatibility and migration](docs/compatibility.md). See [Validation](#validation).
 
+## Scheduled maintenance for multiple permissions
+
+`maintain.py` is a standalone pre-expiry scheduler entry point, without Gateway or Codex. Configure `target_rows` with any explicit combination of message, document, disk or mail permission labels. Defaults: hourly checks, renew within 24 hours, and close the verified permissions window after the cycle. Per-permission progress, cooldown and interrupted-action reconciliation avoid treating all capabilities as one expiry.
+
+Use [config.maintenance.example.json](config.maintenance.example.json), run `maintain.py --config /absolute/private/keeper.json` once, then generate a launchd job with `--write-launchagent PATH`. `--list-capabilities` needs no account; `--status` reads historical scheduler evidence only. See [deployment and reuse](docs/scheduled-maintenance.md).
+
+This path does not require a probe spreadsheet or run write probes. GUI evidence remains separate from business API validation. The existing `keepalive.py` document-probe recovery flow is unchanged. The capability catalog is not a claim that every permission has been live-tested on the current client.
+
 ## Quick start
 
 **Requirements:** macOS, Python 3.11+, a logged-in WeCom desktop client, and `wecom-cli` already authorized for the target bot. Desktop actions require macOS Accessibility permission.

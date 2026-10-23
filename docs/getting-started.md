@@ -4,6 +4,8 @@
 
 新版导航仅在企业微信 5.0.12.95037 中文版实测；旧版请先读[兼容与升级](compatibility.md)，不要直接替换稳定部署。
 
+需要多权限、过期前自动续期且不依赖 Gateway 时，请使用[独立定时维护指南](scheduled-maintenance.md)。本页同时保留底层命令和旧文档探针入口。
+
 ## 安装
 
 需要 macOS、Python 3.11+、已登录的企业微信桌面端，以及有权管理目标机器人的成员身份。GUI 必须可操作；休眠、锁屏和其他自动化会影响执行。
@@ -62,7 +64,7 @@ cp config.example.json config.json
 .venv/bin/python renew.py --config config.json --check --existing-window
 ```
 
-`--check` 不改授权、不发消息、不改 monitor；它会写本地状态。省略 `--existing-window` 时可点击当前可见的目标授权链接，；显式开启 `chat_history_navigation` 后也可搜索目标聊天的历史链接。页面必须暴露匹配两项 bot 参数的 AXWebArea URL，否则拒绝操作。
+`--check` 不改授权、不发消息、不改 monitor；它会写本地状态。省略 `--existing-window` 时可点击当前可见的目标授权链接；显式开启 `chat_history_navigation` 后也可搜索目标聊天的历史链接。页面必须暴露匹配两项 bot 参数的 AXWebArea URL，否则拒绝操作。
 
 恢复已经到期的配置项，然后验证业务读写：
 

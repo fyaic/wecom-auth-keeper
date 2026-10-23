@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Reusable multi-permission scheduling — 2026-10-23
+
+- Add standalone `maintain.py`: default hourly scheduling and a 24-hour pre-expiry window for an explicit combination of capability labels, without Gateway or Codex dependencies.
+- Persist each permission's progress, cooldown and pre-action intent; prioritize pending recovery, reconcile completed grants after interruptions, and retain exponential failure backoff.
+- Hold the shared desktop lock through navigation, renewal, verification and cleanup; bound the GUI worker lifetime with a supervisor and attempt cleanup after timeouts.
+- Add capability discovery, historical status, a minimal multi-permission config and launchd generation. Legacy document probes remain unchanged; GUI evidence never claims business verification.
+
+
 ### Native history navigation — 2026-10-23
 
 - Add opt-in `chat_history_navigation`: locate the configured chat through native search, verify its heading,

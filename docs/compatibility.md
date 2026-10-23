@@ -21,6 +21,8 @@
 
 中文原生聊天界面、已登录解锁的桌面和后台 Python 的辅助功能授权是前提。运行期间仍会切换会话与前台；完成后关闭权限页不等于恢复原聊天、关闭聊天记录面板或实现多个 UI 服务互斥。其他 UI 服务需要共享桌面锁或错开执行；本项目只协调使用 `~/.wecom-auth-renew/desktop.lock` 的 Keeper 进程。锁屏、强制杀进程或客户端卡死时不能保证清理完成。
 
+新增独立 `maintain.py` 的配置、调度和恢复逻辑有混合多权限回归覆盖；本机直接 Python launchd 试跑被辅助功能检查拒绝，未完成此启动链的真实续期。原 Gateway 启动链继续运行。详见[独立调度验收边界](validation.md)。
+
 ## 验证由谁执行
 
 正式任务是 launchd → Gateway 的确定性 TypeScript 调度脚本 → Keeper Python/PyObjC AX 脚本，不调用 Codex、模型、视觉识别或 computer-use 服务。Codex 在开发阶段修改代码、准备测试并读取证据；成功的后台周期没有 Codex 中途点击、补导航或批准授权。早先的代理手动恢复、首次脚本失败和修复后的纯脚本成功在[验证记录](validation.md)中分开陈述。

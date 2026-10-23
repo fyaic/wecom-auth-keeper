@@ -6,6 +6,7 @@ import json
 import plistlib
 import re
 import subprocess
+import sys
 from pathlib import Path
 from urllib.parse import unquote, urlsplit
 
@@ -63,6 +64,18 @@ def main():
         errors.append("config.example.json: missing fields " + ", ".join(sorted(missing)))
     if not isinstance(config.get("bridge_send_link"), bool):
         errors.append("config.example.json: bridge_send_link must be boolean")
+    sys.path.insert(0, str(ROOT))
+    from keeper_maintenance import policy
+    from keeper_capabilities import CAPABILITY_LABELS
+    for filename in ("config.example.json", "config.maintenance.example.json"):
+        try:
+            example = json.loads((ROOT / filename).read_text(encoding="utf-8"))
+            policy(example)
+            if (not example["target_rows"] or len(example["target_rows"]) != len(set(example["target_rows"]))
+                    or not set(example["target_rows"]).issubset(CAPABILITY_LABELS)):
+                raise ValueError("Invalid example capability allowlist")
+        except Exception:
+            errors.append(f"{filename}: invalid maintenance policy or capability allowlist")
     for error in errors:
         print("FAIL:", error)
     if errors:

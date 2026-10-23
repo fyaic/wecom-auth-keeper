@@ -26,6 +26,19 @@ wecom-auth-keeper 使用已登录的 macOS 企业微信桌面会话，检测失�
 > [!IMPORTANT]
 > 当前为实验性运维工具，需要常驻、已登录且可操作的 Mac。已有文档读写、通讯录的页面预续期记录；2026-10-23 新增单机后台聊天记录导航、发送消息权限预续期及同 Bot 会话查询实测。跨设备、锁屏和跨周期运行仍待验收。新版入口仅在企业微信 **5.0.12.95037 中文版**实测，旧版兼容性未知，参见[兼容与升级](docs/compatibility.md)。详见[验证状态](#验证状态)。
 
+## 多权限定时提前续期
+
+新增独立入口 `maintain.py`，无需 Gateway 或 Codex：同一份 `target_rows` 可同时维护消息、文档、微盘、邮箱等权限，默认每小时检查、提前 24 小时逐项续期，完成后自动关页。每项单独保存进度和冷却，中断时优先恢复。
+
+```bash
+# 使用 config.maintenance.example.json 配置所需能力
+.venv/bin/python maintain.py --config /absolute/private/keeper.json
+# 列出可配置的权限目录，不访问企业微信
+.venv/bin/python maintain.py --list-capabilities
+```
+
+部署步骤与定时任务生成见[多权限定时维护](docs/scheduled-maintenance.md)。新入口按 GUI 有效期调度，不运行文档写探针，也不把页面成功当成业务 API 已验证。下方旧 `keepalive.py` 仍是文档双探针到期恢复入口。
+
 ## 快速开始
 
 **前置条件：** macOS、Python 3.11+、已登录的企业微信，以及已完成目标 bot 授权的 `wecom-cli`。桌面操作需要 macOS 辅助功能权限。

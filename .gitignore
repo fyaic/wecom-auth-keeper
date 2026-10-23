@@ -11,3 +11,4 @@ __pycache__/
 *.notice.json
 *.keepalive.lock
 .DS_Store
+*.maintenance.json
