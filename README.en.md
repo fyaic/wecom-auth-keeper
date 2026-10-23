@@ -24,7 +24,7 @@ wecom-auth-keeper uses an existing macOS WeCom session to inspect permissions, i
 - **Recoverable interruptions:** process locks, atomic state, a pending-recovery journal and optional deduplicated notifications.
 
 > [!IMPORTANT]
-> Experimental operations tool. A logged-in, interactive Mac must remain available. The standalone script has renewed document read/write and contacts permissions on a live account. Full navigation, business API checks and multi-cycle acceptance remain outstanding. See [Validation](#validation).
+> Experimental operations tool. A logged-in, interactive Mac must remain available. The standalone script has renewed document read/write and contacts permissions on a live account. On October 23, a launchd script autonomously navigated chat history and pre-renewed message permission, followed by a separate same-Bot read-only API probe. The new path was tested only on Chinese WeCom **5.0.12.95037**; older-client compatibility, other devices and multi-cycle operation remain unverified. See [compatibility and migration](docs/compatibility.md). See [Validation](#validation).
 
 ## Quick start
 
@@ -70,6 +70,12 @@ Run from the repository directory. Operational results are JSON; see the [setup 
 | Experimental pre-expiry renewal for permissions due within 24 hours | `.venv/bin/python renew.py --config config.json --pre-renew --existing-window --within-hours 24` |
 
 Expired-permission recovery can reuse an open permissions page or click a visible target authorization link in the current chat. **Pre-expiry renewal requires an already-open target page.** The script scrolls target controls into view; automatic management-list navigation is not implemented. Revocation and re-granting create a temporary permission gap.
+
+Opt-in `chat_history_navigation: true` searches the configured chat, validates its heading, searches existing history for `authorizationList`, and accepts only official HTTPS links matching both Bot identifiers. It never sends a link or switches organizations. Keep it disabled on older deployments until locally validated. `--existing-window` remains strict: navigate with `--check` first, then run pre-renewal.
+
+At the end of the whole cycle, `--close-window` closes only the identity-verified target window through its native close control. It does not navigate, quit WeCom, or overwrite renewal evidence. The Gateway worker can opt in with `WECOM_AUTH_KEEPER_CLOSE_WINDOW=true` after upgrading both repositories; it cleans up after the final inspection, including healthy cycles. Cleanup failure is reported separately. This does not restore the previous chat or coordinate unrelated UI processes. See [setup](docs/getting-started.md).
+
+The successful background test ran deterministic TypeScript/Python/AX scripts under launchd. Codex prepared and reviewed the test, but made no intermediate GUI actions and is not a runtime dependency.
 
 After verifying a single run, follow the [setup guide](docs/getting-started.md) to install an hourly launchd job. The job recovers after expiry; it does not automatically run `--pre-renew`. Scheduling and business retries do not guarantee zero downtime.
 

@@ -1,7 +1,8 @@
 """Small native AX adapter. No bridge imports, configuration or network access."""
 import time
+from contextlib import contextmanager
 from keeper_common import KeeperError
-from AppKit import NSWorkspace
+from AppKit import NSWorkspace, NSPasteboard, NSPasteboardItem, NSPasteboardTypeString
 from ApplicationServices import (
     AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
     AXUIElementPerformAction, AXUIElementCopyActionNames, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
@@ -9,7 +10,72 @@ from ApplicationServices import (
 from Quartz import (
     CGEventCreateMouseEvent, CGEventPost, CGPoint, kCGEventLeftMouseDown,
     kCGEventLeftMouseUp, kCGHIDEventTap,
+    CGEventCreateKeyboardEvent, CGEventSetFlags, CGEventPostToPid, kCGEventFlagMaskCommand,
 )
+
+
+def require_search_focus(native, app, window, element):
+    """Keyboard input is limited to a verified native search field, never a composer."""
+    front = NSWorkspace.sharedWorkspace().frontmostApplication()
+    if (front is None or front.processIdentifier() != native.processIdentifier()
+            or ax_get(app, "AXFocusedWindow") != window
+            or ax_get(app, "AXFocusedUIElement") != element
+            or ax_get(element, "AXRole") != "AXTextField"):
+        raise KeeperError("navigation_focus_lost", "Search focus changed; navigation stopped")
+
+
+def search_key(native, app, window, element, code, flags=0):
+    require_search_focus(native, app, window, element)
+    for down in (True, False):
+        event = CGEventCreateKeyboardEvent(None, code, down)
+        CGEventSetFlags(event, flags)
+        CGEventPostToPid(native.processIdentifier(), event)
+        time.sleep(0.05)
+
+
+@contextmanager
+def temporary_clipboard(text):
+    """Preserve all pasteboard formats; do not overwrite a concurrent user's copy."""
+    board = NSPasteboard.generalPasteboard()
+    saved = []
+    for source in board.pasteboardItems() or []:
+        item = NSPasteboardItem.alloc().init()
+        for kind in source.types():
+            data = source.dataForType_(kind)
+            if data is not None:
+                item.setData_forType_(data, kind)
+        saved.append(item)
+    board.clearContents()
+    board.setString_forType_(text, NSPasteboardTypeString)
+    own_change = board.changeCount()
+    try:
+        yield
+    finally:
+        if board.changeCount() == own_change:
+            board.clearContents()
+            if saved:
+                board.writeObjects_(saved)
+
+
+def replace_search(native, app, window, element, text):
+    click(element, window)
+    time.sleep(0.15)
+    require_search_focus(native, app, window, element)
+    with temporary_clipboard(text):
+        search_key(native, app, window, element, 0, kCGEventFlagMaskCommand)  # Command-A
+        search_key(native, app, window, element, 9, kCGEventFlagMaskCommand)  # Command-V
+        deadline = time.monotonic() + 3
+        while ax_get(element, "AXValue") != text:
+            require_search_focus(native, app, window, element)
+            if time.monotonic() >= deadline:
+                raise KeeperError("navigation_input_failed", "Search text was not accepted")
+            time.sleep(0.05)
+
+
+def submit_search(native, app, window, element, expected):
+    if ax_get(element, "AXValue") != expected:
+        raise KeeperError("navigation_input_failed", "Search text changed before selection")
+    search_key(native, app, window, element, 36)  # Return; only while search has focus
 
 
 def ax_get(element, attribute):

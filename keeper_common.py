@@ -35,7 +35,7 @@ def load_config(path, *, probes=False):
     rows = cfg.setdefault("target_rows", DEFAULT_ROWS.copy())
     if not isinstance(rows, list) or not rows or any(not isinstance(r, str) or not r.strip() for r in rows) or len(set(rows)) != len(rows):
         raise KeeperError("invalid_config", "target_rows must contain unique nonempty names", 3)
-    for key in ("bridge_send_link", "bridge_monitor"):
+    for key in ("bridge_send_link", "bridge_monitor", "chat_history_navigation"):
         if key in cfg and not isinstance(cfg[key], bool):
             raise KeeperError("invalid_config", f"{key} must be boolean", 3)
     for key, default in (("probe_timeout", 90), ("renew_timeout", 240), ("lock_wait", 10)):

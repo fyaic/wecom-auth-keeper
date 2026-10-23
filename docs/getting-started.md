@@ -2,6 +2,8 @@
 
 [返回首页](../README.md) · [命令与退出码](#命令与退出码)
 
+新版导航仅在企业微信 5.0.12.95037 中文版实测；旧版请先读[兼容与升级](compatibility.md)，不要直接替换稳定部署。
+
 ## 安装
 
 需要 macOS、Python 3.11+、已登录的企业微信桌面端，以及有权管理目标机器人的成员身份。GUI 必须可操作；休眠、锁屏和其他自动化会影响执行。
@@ -22,7 +24,7 @@ cp config.example.json config.json
 
 | 字段 | 说明 |
 |---|---|
-| `bot_chat_name` | 目标机器人会话名；供可选的链接投递使用 |
+| `bot_chat_name` | 目标机器人完整会话名；供可选的聊天记录导航和链接投递使用 |
 | `aibotid` / `str_aibotid` | 同一目标授权链接中的两项身份参数；均须字符串，仅保存在本地 |
 | `target_rows` | 需要检查/恢复的能力行名；默认文档读、写两项 |
 | `read_docid` | CLI 读探针表格 |
@@ -33,6 +35,7 @@ cp config.example.json config.json
 | `probe_timeout` | 每次 CLI 探针超时秒数 |
 | `renew_timeout` | 保活启动的 GUI 子进程总超时秒数 |
 | `lock_wait` | 等待进程锁的秒数；超时退出 4 |
+| `chat_history_navigation` | 可选原生聊天记录导航，默认 false；要求已有匹配的官方授权链接 |
 | `bridge_send_link` | 可选：通过 bridge 发授权链接；默认 false |
 | `bridge_monitor` | 可选：操作前切 observe、完成后恢复原模式；默认 false，与发送开关独立 |
 | `bridge_url` / `notify_to` | 可选 bridge HTTP 地址与通知接收人；默认不通知 |
@@ -59,7 +62,7 @@ cp config.example.json config.json
 .venv/bin/python renew.py --config config.json --check --existing-window
 ```
 
-`--check` 不改授权、不发消息、不改 monitor；它会写本地状态。省略 `--existing-window` 时可点击当前可见的目标授权链接，但不会主动切换到指定聊天。页面必须暴露匹配两项 bot 参数的 AXWebArea URL，否则拒绝操作。
+`--check` 不改授权、不发消息、不改 monitor；它会写本地状态。省略 `--existing-window` 时可点击当前可见的目标授权链接，；显式开启 `chat_history_navigation` 后也可搜索目标聊天的历史链接。页面必须暴露匹配两项 bot 参数的 AXWebArea URL，否则拒绝操作。
 
 恢复已经到期的配置项，然后验证业务读写：
 
@@ -83,7 +86,30 @@ cp config.example.json config.json
 
 取消前持久化 `<state_file>.pending.json`。中断后，程序优先重授；仍失败则保留记录并停止。下一次 `--renew` 或保活会优先尝试该记录。不要为了消除报错直接删记录，应先确认目标权限已经恢复。存在无法确认取消是否发生的情况时，可能需要人工复核。
 
-2026-09-22 已用独立脚本完成文档读写、通讯录三项真实预续期，重开页面复核一致。详见[实测记录](validation.md)及[临时方案](workaround.md)。本次没有运行业务 API 探针，完整导航、干净 Mac 部署和跨周期运行仍待验收。
+2026-09-22 已用独立脚本完成文档读写、通讯录三项真实预续期，重开页面复核一致。详见[实测记录](validation.md)及[临时方案](workaround.md)。该次没有运行业务 API 探针。10/23 的纯脚本后台导航、消息预续期及独立同 Bot 会话查询另有记录；干净 Mac、旧版兼容和跨周期运行仍待验收。
+
+## 周期结束后关闭权限页
+
+```bash
+.venv/bin/python renew.py --config config.json --close-window
+```
+
+只关闭同时匹配两个 Bot 标识的唯一权限窗口，使用原生 `AXCloseButton`，确认窗口消失后返回 `closed: true`。页面已关闭时返回 `closed: false`，仍为成功；重复目标窗口、额外网页或关闭动作失败时非零退出。不导航、不发消息、不退出企业微信，也不覆盖授权状态或 pending 恢复记录。
+
+必须放在**完整检查→续期→复查之后**，不能插在前置 `--check` 与 `--pre-renew --existing-window` 之间。直接编排命令的调用方应在 finally 中执行清理，并分别保留续期与清理结果。`renew.py --renew` 本身不会自动关页，避免破坏已有编排。
+
+Gateway 每小时维护需要同时更新 Gateway 与 Keeper，并在服务 env 中启用：
+
+```dotenv
+WECOM_AUTH_KEEPER_EXISTING_WINDOW_ONLY=false
+WECOM_AUTH_MAINTENANCE_PRE_RENEW=true
+WECOM_AUTH_KEEPER_WITHIN_HOURS=24
+WECOM_AUTH_KEEPER_CLOSE_WINDOW=true
+```
+
+该调度在所有检查和操作之后关页，健康且无需续期的周期也会清理；关页失败报告 `window-cleanup-failed`，保留操作前后的证据。未实际检查的禁用、退避和锁冲突周期不操作 UI。`status` 仍是只读查询。旧 Keeper 不支持新关页命令，启用前必须升级两端并重启服务。
+
+关页只消除权限窗口遮挡，运行期间仍需占用企业微信 UI。它不恢复原聊天或关闭历史面板，不保证其他服务并发操作安全；应共享锁或错峰。后台验证无需 Codex 运行，详见[验证分工](compatibility.md#验证由谁执行)。
 
 ### 选择能力范围
 

@@ -8,6 +8,71 @@ from keeper_common import KeeperError, emit_error
 
 @unittest.skipUnless(sys.platform == "darwin" and importlib.util.find_spec("ApplicationServices"), "Native dependencies unavailable")
 class NativeTests(unittest.TestCase):
+    def test_clipboard_restores_original_formats_even_on_failure(self):
+        import keeper_ax
+        source, restored, board = Mock(), Mock(), Mock()
+        source.types.return_value = ['public.utf8-plain-text', 'public.rtf']
+        source.dataForType_.side_effect = [b'original', b'formatted']
+        board.pasteboardItems.return_value = [source]
+        board.changeCount.side_effect = [7, 7]
+        with patch.object(keeper_ax, 'NSPasteboard') as pasteboard, \
+             patch.object(keeper_ax, 'NSPasteboardItem') as item:
+            pasteboard.generalPasteboard.return_value = board
+            item.alloc.return_value.init.return_value = restored
+            with self.assertRaises(RuntimeError):
+                with keeper_ax.temporary_clipboard('fixture'):
+                    raise RuntimeError('focus lost')
+        self.assertEqual(restored.setData_forType_.call_count, 2)
+        board.writeObjects_.assert_called_once_with([restored])
+
+    def test_clipboard_preserves_a_concurrent_new_copy(self):
+        import keeper_ax
+        board = Mock()
+        board.pasteboardItems.return_value = []
+        board.changeCount.side_effect = [7, 8]
+        with patch.object(keeper_ax, 'NSPasteboard') as pasteboard:
+            pasteboard.generalPasteboard.return_value = board
+            with keeper_ax.temporary_clipboard('fixture'):
+                pass
+        board.clearContents.assert_called_once()
+        board.writeObjects_.assert_not_called()
+
+    def test_search_keyboard_rejects_foreground_app_change(self):
+        import keeper_ax
+        native, other = Mock(), Mock()
+        native.processIdentifier.return_value = 123
+        other.processIdentifier.return_value = 456
+        with patch.object(keeper_ax, 'NSWorkspace') as workspace, \
+             patch.object(keeper_ax, 'CGEventPostToPid') as post:
+            workspace.sharedWorkspace.return_value.frontmostApplication.return_value = other
+            with self.assertRaises(KeeperError):
+                keeper_ax.search_key(native, object(), object(), object(), 36)
+            post.assert_not_called()
+
+    def test_search_return_rejects_message_composer(self):
+        import keeper_ax
+        app, window, field, native = object(), object(), object(), Mock()
+        native.processIdentifier.return_value = 123
+        def get(element, key):
+            return {'AXFocusedWindow': window, 'AXFocusedUIElement': field,
+                    'AXRole': 'AXTextArea', 'AXValue': 'fixture'}.get(key)
+        with patch.object(keeper_ax, 'NSWorkspace') as workspace, \
+             patch.object(keeper_ax, 'ax_get', side_effect=get), \
+             patch.object(keeper_ax, 'CGEventPostToPid') as post:
+            workspace.sharedWorkspace.return_value.frontmostApplication.return_value = native
+            with self.assertRaises(KeeperError) as caught:
+                keeper_ax.submit_search(native, app, window, field, 'fixture')
+            self.assertEqual(caught.exception.code, 'navigation_focus_lost')
+            post.assert_not_called()
+
+    def test_search_return_rejects_changed_query(self):
+        import keeper_ax
+        with patch.object(keeper_ax, 'ax_get', return_value='changed'), \
+             patch.object(keeper_ax, 'CGEventPostToPid') as post:
+            with self.assertRaises(KeeperError):
+                keeper_ax.submit_search(object(), object(), object(), object(), 'fixture')
+            post.assert_not_called()
+
     def test_untrusted_process_returns_fixed_code_before_application_discovery(self):
         import keeper_ax
         with patch.object(keeper_ax, "AXIsProcessTrusted", return_value=False), \
