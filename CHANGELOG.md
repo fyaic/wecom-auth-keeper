@@ -2,6 +2,25 @@
 
 ## Unreleased
 
+### Reusable multi-permission scheduling — 2026-10-23
+
+- Add standalone `maintain.py`: default hourly scheduling and a 24-hour pre-expiry window for an explicit combination of capability labels, without Gateway or Codex dependencies.
+- Persist each permission's progress, cooldown and pre-action intent; prioritize pending recovery, reconcile completed grants after interruptions, and retain exponential failure backoff.
+- Hold the shared desktop lock through navigation, renewal, verification and cleanup; bound the GUI worker lifetime with a supervisor and attempt cleanup after timeouts.
+- Add capability discovery, historical status, a minimal multi-permission config and launchd generation. Legacy document probes remain unchanged; GUI evidence never claims business verification.
+
+
+### Native history navigation — 2026-10-23
+
+- Add opt-in `chat_history_navigation`: locate the configured chat through native search, verify its heading,
+  search its history for an existing official authorization link, and retain both Bot identifiers and page checks.
+- Add `--close-window` for identity-verified native window cleanup without navigation or overwriting health/recovery evidence. Gateway can invoke it after a complete cycle.
+- Document the tested 5.0.12.95037 Chinese client and explicitly leave older-client compatibility unverified; navigation stays opt-in.
+- No link messages or bridge service are needed for this route. Existing-window-only mode remains strict.
+- Guard keyboard input with foreground/window/search-field checks; preserve pasteboard formats and concurrent copies.
+- Validate a complete launchd pre-renewal for the existing message capability on WeCom 5.0.12, followed by a same-Bot
+  read-only business probe; install hourly maintenance with a 24-hour pre-renew window. See [validation](docs/validation.md).
+
 ### Live validation and documentation — 2026-09-22
 
 - Validated standalone document read/write and contacts pre-renewal on WeCom `5.0.11.99998`: all three expiries changed from September 22 18:39 to September 29 16:18, verified after reopening the page.

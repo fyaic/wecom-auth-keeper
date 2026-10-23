@@ -16,12 +16,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 from keeper_common import KeeperError, atomic_json, emit_error, executable, gui_lock_path, load_config, process_lock
 
 ZW = re.compile(r"[\u200b\u200c\u200d\ufeff\ufffc]")
-CAPABILITY_LABELS = {
-    "发送消息", "发送邮件", "搜索与获取邮件内容", "新建与编辑文档",
-    "搜索与获取文档内容", "新建与跟进待办", "新建与管理日程", "预约与更新会议",
-    "搜索与获取会议信息", "上传与更新微盘文件", "搜索与获取微盘文件内容",
-    "搜索企业成员", "获取对话用户信息",
-}
+from keeper_capabilities import CAPABILITY_LABELS
 
 
 def clean(value):
@@ -184,6 +179,10 @@ class Renewal:
         self.ax.activate(native)
         self.sleep(1)
         links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
+        if not links and self.cfg.get("chat_history_navigation", False):
+            from keeper_navigation import open_chat_history
+            open_chat_history(self, native)
+            links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
         if not links:
             raise KeeperError("link_not_visible", "Open the target chat and make its authorization link visible")
         _, _, chat = max(links, key=lambda item: item[0])
@@ -208,6 +207,26 @@ class Renewal:
             if self.clock() >= deadline:
                 raise KeeperError(error, "Timed out waiting for verified UI state")
             self.sleep(0.5)
+
+    def close_window(self):
+        """Close only the verified standalone target window; never navigate or type."""
+        _, self.app = self.ax.application()
+        window = self.select_window()
+        if window is None:
+            return {"ok": True, "mode": "close-window", "closed": False}, 0
+        self.bound(window)
+        pages = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea"]
+        button = self.ax.ax_get(window, "AXCloseButton")
+        if (len(pages) != 1 or button is None
+                or self.ax.ax_get(button, "AXRole") != "AXButton"
+                or self.ax.ax_get(button, "AXSubrole") != "AXCloseButton"):
+            raise KeeperError("window_close_unavailable", "No unambiguous native close control for the target page")
+        self.bound(window)
+        if self.ax.ax_perform(button, "AXPress") != 0:
+            raise KeeperError("window_close_failed", "Target window rejected its native close action")
+        self.wait(lambda: self.ax.ax_get(self.app, "AXWindows") or [],
+                  lambda windows: window not in windows, "window_close_failed", timeout=3)
+        return {"ok": True, "mode": "close-window", "closed": True}, 0
 
     def read_rows(self, window):
         page = self.bound(window)
@@ -360,7 +379,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", default=str(Path(__file__).with_name("config.json")))
     modes = parser.add_mutually_exclusive_group()
-    for option in ("check", "renew", "pre-renew", "doctor"):
+    for option in ("check", "renew", "pre-renew", "doctor", "close-window"):
         modes.add_argument("--" + option, action="store_true")
     parser.add_argument("--existing-window", action="store_true", help="Only inspect/use an already-open, identity-verified page")
     parser.add_argument("--within-hours", type=float, default=24, help="Pre-renew permissions due within this horizon (0..168)")
@@ -385,14 +404,17 @@ def main(argv=None):
                 raise KeeperError("invalid_arguments", "Experimental pre-renew requires --existing-window", 3)
             with process_lock(gui_lock_path(), cfg["lock_wait"]):
                 try:
-                    result, code = Renewal(cfg, ax).run(mode, args.existing_window, args.within_hours)
+                    engine = Renewal(cfg, ax)
+                    result, code = (engine.close_window() if args.close_window else
+                                    engine.run(mode, args.existing_window, args.within_hours))
                 except Exception as exc:
                     result, code = emit_error(exc)
                     try:
                         # Write failures while still holding the GUI lock, so a failed
                         # process cannot overwrite a newer successful observation.
-                        atomic_json(cfg["state_file"], {**result, "read_at": datetime.now().isoformat(),
-                                                       "pending_recovery": Path(cfg["state_file"] + ".pending.json").exists()})
+                        if not args.close_window:
+                            atomic_json(cfg["state_file"], {**result, "read_at": datetime.now().isoformat(),
+                                                           "pending_recovery": Path(cfg["state_file"] + ".pending.json").exists()})
                     except OSError:
                         pass
     except Exception as exc:
