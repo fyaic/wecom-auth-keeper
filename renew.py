@@ -265,23 +265,33 @@ def read_rows(win):
     return rows
 
 
+def find_intercept():
+    """安全拦截页检测（2026-10-27 实证）：授权提交会请求 aegis.qq.com 风控，
+    该域名被 NextDNS 类 DNS 拦截时内嵌浏览器弹「访问链接存在安全风险」，
+    需人工长按「继续访问」——合成鼠标事件（含长按变体）全部无效，故只检测告警。"""
+    return find_all(lambda e: str(ax_get(e, "AXRole")) == "AXButton"
+                    and clean(ax_get(e, "AXTitle")) == "继续访问")
+
+
 def click_renew(win, name, row, max_tries=3):
-    """点授权并轮询确认（≤30s/轮），未中补点重试——首击偶发未中的闭环加固"""
+    """点授权并轮询确认（≤30s/轮），未中补点重试——首击偶发未中的闭环加固。
+    返回 True=已授权 / False=失败（含安全拦截）。
+    2026-10-27 授权页改版：确认弹窗变「发送/取消」（旧词 确认/确定 匹配不上导致连败）。"""
     for try_i in range(max_tries):
         r = row["btn"] if try_i == 0 else None
         if r is None:
             r = read_rows(win).get(name, {}).get("btn")
             if r is None:
-                return  # 行已 authorized——成功
+                return True  # 行已 authorized——成功
         f = frame(r)
         if f is None:
-            return
+            return True
         click_at(f[0] + f[2] / 2, f[1] + f[3] / 2)
         time.sleep(1.5)
-        for _ in range(3):  # 确认弹窗（变体词全收）
+        for _ in range(3):  # 确认弹窗（2026-10-27 起为「发送」；保留旧词兼容）
             confirms = find_all(lambda e: str(ax_get(e, "AXRole")) == "AXButton"
-                                and any(k in str(ax_get(e, "AXTitle") or "")
-                                        for k in ("确认", "确定", "重新授权", "同意")))
+                                and clean(ax_get(e, "AXTitle")) in
+                                ("发送", "确认", "确定", "重新授权", "同意"))
             if not confirms:
                 break
             cf = frame(confirms[0])
@@ -289,11 +299,17 @@ def click_renew(win, name, row, max_tries=3):
                 break
             click_at(cf[0] + cf[2] / 2, cf[1] + cf[3] / 2)
             time.sleep(1.2)
+        # 安全拦截：aegis.qq.com 被 DNS 层拦截 → 快速失败（人工长按/修 hosts 后下轮自愈）
+        if find_intercept():
+            log("SECURITY INTERCEPT: aegis.qq.com 被 DNS 拦截（NextDNS/hosts），"
+                "需人工长按『继续访问』或修 DNS 后下轮自愈")
+            return False
         t0 = time.time()
         while time.time() - t0 < 30:
             if read_rows(win).get(name, {}).get("status") == "authorized":
-                return
+                return True
             time.sleep(3.0)
+    return False
 
 
 def acquire_renew_lock(max_wait_s=150):
@@ -360,19 +376,25 @@ def main():
             entry = {"status": row["status"],
                      "expiry": row["expiry"].strftime("%Y-%m-%d %H:%M") if row["expiry"] else None}
             if mode == "--renew" and row["status"] == "expired" and row["btn"] is not None:
-                click_renew(win, name, row)
+                ok = click_renew(win, name, row)
                 na = read_rows(win).get(name, {})
-                entry["renewed"] = na.get("status") == "authorized"
+                entry["renewed"] = na.get("status") == "authorized" or ok
                 entry["expiry_after"] = (na["expiry"].strftime("%Y-%m-%d %H:%M")
                                          if na.get("expiry") else None)
+                if not entry["renewed"] and find_intercept():
+                    entry["blocked"] = "security_intercept"
+                    result["blocked"] = "security_intercept"
             result["rows"][name] = entry
+        # 状态落盘——记最终态（续期后的有效期），避免"续期前 null"误导观察
+        # （2026-10-28 整改）；须在关窗前读
+        rows_final = read_rows(win) or rows_before
         close_auth_window(win)
         sp = _p("state_file")
         if sp:
             os.makedirs(os.path.dirname(sp), exist_ok=True)
             json.dump({"read_at": datetime.now().isoformat(),
                        "expiries": {n: (r["expiry"].isoformat() if r.get("expiry") else None)
-                                    for n, r in rows_before.items()}}, open(sp, "w"))
+                                    for n, r in rows_final.items()}}, open(sp, "w"))
         result["ok"] = True
         print(json.dumps(result, ensure_ascii=False))
         log(f"mode={mode} " + json.dumps(result["rows"], ensure_ascii=False))
