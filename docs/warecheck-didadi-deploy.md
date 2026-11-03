@@ -10,9 +10,9 @@
 | 搜索企业成员 | v1 验货 flow2 每次 @身份解析（`contact users search`），v2 通知客服解析 |
 | （不加）发送消息 | 本企业 853006 不可用；群通知走 webhook 机器人，与 bot 授权无关 |
 
-## 1. 取两项身份参数（唯一人工步骤）
+## 1. 取两项身份参数（通常零人工）
 
-`aibotid`（数字）与 `str_aibotid`（aib 开头）来自**机器人管理权限页链接**：企业微信 → 工作台 → 智能机器人 → 装柜提醒bot → 授权文档使用权限，页面 URL 内含两参数。已知 str_aibotid 应等于 `wecom-cli auth show` 的 Bot ID（`aibNIF3gzZPv1vFefOO9BgLY1u4TzaL0W5Y`），可用作核对。不要为了取链接让业务授权故意过期。
+`aibotid`（数字）与 `str_aibotid`（aib 开头）来自机器人授权页链接。**本机已有现成来源**：wecom-cli 的 850003 错误日志（`~/.config/warecheck-v2/wecom-directory-didadi/log/ww.log.*`）中的帮助链接即含两参数，且 `str_aibotid` 应等于 `wecom-cli auth show` 的 Bot ID（`aibNIF3gzZPv1vFefOO9BgLY1u4TzaL0W5Y`），用作交叉核对。仅在日志已轮转清空时才需从「企业微信 → 工作台 → 智能机器人 → 装柜提醒bot」管理页链接现取。不要为了取链接让业务授权故意过期。
 
 ## 2. 私有配置（不入库）
 
@@ -29,6 +29,8 @@ cp config.didadi.example.json ~/.config/warecheck-v2/wecom-auth-keeper/maintain-
 ```
 
 ## 3. 生成并安装定时任务
+
+**一次性系统授权（仅首次）**：系统设置 → 隐私与安全性 → 辅助功能 → 「+」→ 按 `Cmd+Shift+G` 粘贴 `/Users/veil/projects/wecom-auth-keeper/.venv/bin/python3` → 添加并保持开启。launchd 拉起的 Python 没有该权限时，首轮即报 `accessibility_permission_unavailable` 并进入冷却重试，授权后下一轮自动恢复（无需重启任务）。
 
 ```bash
 CFG=~/.config/warecheck-v2/wecom-auth-keeper/maintain-didadi.json
