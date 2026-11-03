@@ -14,6 +14,21 @@
 
 `aibotid`（数字）与 `str_aibotid`（aib 开头）来自机器人授权页链接。**本机已有现成来源**：wecom-cli 的 850003 错误日志（`~/.config/warecheck-v2/wecom-directory-didadi/log/ww.log.*`）中的帮助链接即含两参数，且 `str_aibotid` 应等于 `wecom-cli auth show` 的 Bot ID（`aibNIF3gzZPv1vFefOO9BgLY1u4TzaL0W5Y`），用作交叉核对。仅在日志已轮转清空时才需从「企业微信 → 工作台 → 智能机器人 → 装柜提醒bot」管理页链接现取。不要为了取链接让业务授权故意过期。
 
+## 1b. 一次性播种聊天（必做，约 1 分钟）
+
+引擎靠「与目标机器人的聊天记录」导航到授权页。若该 Mac 上没人跟 bot 聊过天，首轮会报 `navigation_target_not_found`。播种一次永久有效：
+
+1. 打开桌面企业微信 → 顶部搜索「装柜提醒bot」→ 打开与它的聊天（首次会自动创建会话）
+2. 把下面的链接整条粘贴发送到该聊天（谁发的都行，引擎只搜记录）：
+
+```
+https://work.weixin.qq.com/ai/aiHelper/authorizationList?from=chat&forceInnerBrowser=1&aibotid=33777000565280640&str_aibotid=aibNIF3gzZPv1vFefOO9BgLY1u4TzaL0W5Y&type=1
+```
+
+3. 保持 `chat_history_navigation: true`（模板默认已开）
+
+播种后触发一轮（kickstart 或手动 `maintain.py --config ...`），成功标志：状态里 `permissions` 出现各项有效期、`rows` 非空。
+
 ## 2. 私有配置（不入库）
 
 ```bash
