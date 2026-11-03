@@ -29,6 +29,8 @@ https://work.weixin.qq.com/ai/aiHelper/authorizationList?from=chat&forceInnerBro
 
 播种后触发一轮（kickstart 或手动 `maintain.py --config ...`），成功标志：状态里 `permissions` 出现各项有效期、`rows` 非空。
 
+**企业微信 5.0.13 实测补充（2026-11-03）**：消息列表有懒加载——播种后需让该聊天在桌面端打开过一次（消息渲染后链接才以 AXLink 暴露），引擎即可正常导航；首个成功样本：三项权限读出有效期、未到期不操作、页面自动关闭。首次完整自动续期预计出现在有效期前 24 小时的整点巡逻。
+
 ## 2. 私有配置（不入库）
 
 ```bash
