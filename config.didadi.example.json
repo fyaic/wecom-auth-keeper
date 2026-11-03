@@ -1,0 +1,26 @@
+{
+  "_comment": "装柜提醒bot（嘀嗒嘀）多权限预续期配置模板。复制到仓库外私有目录（见 docs/warecheck-didadi-deploy.md），替换两项占位符后用 scripts/preflight_didadi.py 校验。target_rows 是唯一操作白名单：智能表格读写（文档两项）+ wecom-cli contact users search（搜索企业成员）；发送消息在本企业不可用（853006），不加入。",
+  "bot_chat_name": "装柜提醒bot",
+  "aibotid": "<机器人管理权限页链接里的 aibotid>",
+  "str_aibotid": "<机器人管理权限页链接里的 str_aibotid，应以 aib 开头且与 wecom-cli auth show 的 Bot ID 一致>",
+  "target_rows": [
+    "搜索与获取文档内容",
+    "新建与编辑文档",
+    "搜索企业成员"
+  ],
+  "chat_history_navigation": false,
+  "bridge_send_link": false,
+  "bridge_monitor": false,
+  "venv_python": "/Users/veil/projects/wecom-auth-keeper/.venv/bin/python3",
+  "state_file": "~/.wecom-auth-renew/didadi/state.json",
+  "log_file": "~/.wecom-auth-renew/didadi/run.log",
+  "renew_timeout": 240,
+  "lock_wait": 10,
+  "maintenance": {
+    "within_hours": 24,
+    "interval_seconds": 3600,
+    "min_renew_interval_seconds": 3600,
+    "retry_seconds": 300,
+    "close_window": true
+  }
+}
