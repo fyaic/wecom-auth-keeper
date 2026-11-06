@@ -70,7 +70,7 @@ def configure(value, destination, system=None):
            'renew_timeout': 600, 'lock_wait': 10,
            'maintenance': {'within_hours': 24, 'interval_seconds': 3600,
                            'min_renew_interval_seconds': 3600, 'retry_seconds': 300, 'close_window': True}}
-    # Organization selection is a candidate-navigation heuristic in the existing engine.
+    # The version-gated organization adapter is opt-in after menu/device validation.
     # Keep its automatic switch off until this exact device has validated that path.
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     with destination.open('x', encoding='utf-8') as f:

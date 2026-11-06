@@ -147,3 +147,25 @@ def application():
 
 def activate(app):
     app.activateWithOptions_(1 << 1)
+
+
+def client_version(native):
+    from Foundation import NSBundle
+    bundle = NSBundle.bundleWithURL_(native.bundleURL())
+    return str(bundle.objectForInfoDictionaryKey_('CFBundleShortVersionString') or '')
+
+
+def open_organization_menu(native, app, window):
+    """Calibrated 5.0.13 entry only; caller verifies semantic corp rows after click."""
+    front = NSWorkspace.sharedWorkspace().frontmostApplication()
+    if (client_version(native) != '5.0.13' or front is None
+            or front.processIdentifier() != native.processIdentifier()
+            or window not in (ax_get(app, 'AXWindows') or [])):
+        raise KeeperError('org_switcher_not_found', 'Organization entry focus/version changed')
+    bounds = frame(window)
+    if not bounds or bounds[2] < 500 or bounds[3] < 400:
+        raise KeeperError('org_switcher_not_found', 'Unexpected sidebar geometry')
+    x, y, width, height = bounds
+    for kind in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
+        CGEventPost(kCGHIDEventTap, CGEventCreateMouseEvent(None, kind, CGPoint(x + 30, y + height - 30), 0))
+        time.sleep(0.1)

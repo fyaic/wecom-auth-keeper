@@ -1,4 +1,5 @@
 """Full native-search -> history -> bound-page fixtures; never use a real desktop."""
+from unittest.mock import patch
 from keeper_common import KeeperError, load_config
 from keeper_navigation import heading_matches
 from test_keeper import FakeAX, Fixture, node
@@ -51,6 +52,21 @@ class NavigationTests(Fixture):
     def setUp(self):
         super().setUp()
         self.cfg['chat_history_navigation'] = True
+
+    def test_unified_chat_does_not_require_organization_markers(self):
+        self.cfg['organization_name'] = 'a different organization name'
+        ax = NavigationAX(self.cfg)
+        with patch('keeper_organization.ensure_organization') as switch:
+            self.assertIs(self.engine(ax).open(), ax.permission_window)
+        switch.assert_not_called()
+
+    def test_focus_failure_does_not_trigger_organization_switch(self):
+        self.cfg['organization_name'] = 'fixture organization'
+        ax = NavigationAX(self.cfg)
+        with patch('keeper_navigation.open_chat_history', side_effect=KeeperError('navigation_focus_lost','lost')), \
+             patch('keeper_organization.ensure_organization') as switch:
+            with self.assertRaises(KeeperError): self.engine(ax).open()
+        switch.assert_not_called()
 
     def test_other_chat_to_verified_page_without_messages(self):
         ax = NavigationAX(self.cfg)

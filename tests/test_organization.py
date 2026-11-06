@@ -1,88 +1,80 @@
-import sys
-import unittest
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from unittest.mock import patch
 from keeper_common import KeeperError
-from keeper_organization import org_visible, ensure_organization
+from keeper_organization import menu_rows, ensure_organization
+from test_keeper import Fixture, node
+from test_navigation import NavigationAX
 
 
-def win_with(texts, frame=(0, 0, 960, 640)):
-    return {"AXRole": "AXWindow", "frame": frame,
-            "AXChildren": [{"AXRole": "AXStaticText", "AXTitle": t, "frame": (100, 100, 50, 20)} for t in texts]}
+def corp(name, selected=False):
+    return node('AXRow', children=[node('AXStaticText', name),
+        node('AXImage', AXDescription='icon corp list selected' if selected else 'icon corp list unselected'),
+        node('AXImage', AXDescription='icon corp checkmark' if selected else '')])
 
 
-class FakeAXModule:
-    """Duck-typed keeper_ax module over dict nodes."""
+class OrganizationTests(Fixture):
+    def setUp(self):
+        super().setUp()
+        self.cfg.update(organization_selector_name='target', organization_navigation='sidebar-5.0.13')
+        self.ax = NavigationAX(self.cfg)
+        self.ax.client_version = lambda _: '5.0.13'
+        self.popup = node('AXWindow', children=[corp('other', True), corp('target')], _frame=(0, 300, 240, 270))
+        self.entries = 0
+        self.original_click = self.ax.click
+        self.ax.open_organization_menu = self.toggle
+        self.ax.click = self.choose
+        self.engine_instance = self.engine(self.ax)
+        self.engine_instance.app = self.ax.app
 
-    def __init__(self, windows):
-        self.windows = windows
+    def toggle(self, *args):
+        self.entries += 1
+        windows = self.ax.app['AXWindows']
+        if self.popup in windows: windows.remove(self.popup)
+        else: windows.append(self.popup)
 
-    def application(self):
-        return None, {"AXWindows": self.windows}
+    def choose(self, row, window):
+        self.ax.clicks.append(row)
+        if row is self.ax.search and self.popup in self.ax.app['AXWindows']:
+            self.ax.app['AXWindows'].remove(self.popup)
+        elif window is self.popup:
+            self.popup['AXChildren'] = [corp('other'), corp('target', True)]
+            self.ax.app['AXWindows'].remove(self.popup)
 
-    def ax_get(self, node, attr):
-        return node.get(attr) if isinstance(node, dict) else None
+    def test_switch_verified_selected_marker_and_menu_closed(self):
+        result = ensure_organization(self.engine_instance, None)
+        self.assertTrue(result['switched'])
+        self.assertEqual(self.entries, 2)
+        self.assertNotIn(self.popup, self.ax.app['AXWindows'])
 
-    def frame(self, node):
-        return node.get("frame") if isinstance(node, dict) else None
+    def test_same_org_is_verified_not_inferred_from_chat(self):
+        self.popup['AXChildren'] = [corp('target', True)]
+        self.assertFalse(ensure_organization(self.engine_instance, None)['switched'])
 
+    def test_unknown_version_does_not_click(self):
+        self.ax.client_version = lambda _: '5.0.14'
+        with self.assertRaises(KeeperError): ensure_organization(self.engine_instance, None)
+        self.assertEqual(self.entries, 0)
 
-def fake_ax(windows):
-    return FakeAXModule(windows)
+    def test_duplicate_name_does_not_choose(self):
+        self.popup['AXChildren'].append(corp('target'))
+        with self.assertRaises(KeeperError): ensure_organization(self.engine_instance, None)
+        self.assertFalse(any(n.get('AXRole') == 'AXRow' for n in self.ax.clicks))
+        self.assertNotIn(self.popup, self.ax.app['AXWindows'])
 
+    def test_substring_name_does_not_choose(self):
+        self.cfg['organization_selector_name'] = 'tar'
+        with self.assertRaises(KeeperError): ensure_organization(self.engine_instance, None)
+        self.assertFalse(any(n.get('AXRole') == 'AXRow' for n in self.ax.clicks))
 
-class FakeEngine:
-    def __init__(self, cfg, windows):
-        self.cfg = cfg
-        self.ax = fake_ax(windows)
-        self.sleeps = 0
+    def test_names_in_chat_do_not_count_as_org(self):
+        self.ax.window['AXChildren'].append(corp('target', True))
+        self.assertEqual(menu_rows(self.engine_instance), [])
 
-    def sleep(self, _s):
-        self.sleeps += 1
+    def test_missing_selected_marker_stops(self):
+        self.popup['AXChildren'] = [corp('target')]
+        with self.assertRaises(KeeperError): ensure_organization(self.engine_instance, None)
+        self.assertFalse(any(n.get('AXRole') == 'AXRow' for n in self.ax.clicks))
 
-    def wait(self, read, accept, error, timeout=20):
-        value = read()
-        if accept(value):
-            return value
-        raise KeeperError(error, "timed out")
-
-
-CFG = {"organization_name": "深圳市嘀嗒嘀物流科技有限公司", "organization_markers": ["装柜提醒bot"]}
-
-
-class OrgVisibleTests(unittest.TestCase):
-    def test_marker_visible(self):
-        ax = fake_ax([win_with(["装柜提醒bot", "闲聊"])])
-        self.assertTrue(org_visible(ax, ax.application()[1], CFG))
-
-    def test_other_org_not_visible(self):
-        ax = fake_ax([win_with(["弗忧智能聊天", "别的组织"])])
-        self.assertFalse(org_visible(ax, ax.application()[1], CFG))
-
-    def test_unconfigured_skips_check(self):
-        ax = fake_ax([win_with(["随便什么"])])
-        self.assertTrue(org_visible(ax, ax.application()[1], {}))
-
-
-class EnsureTests(unittest.TestCase):
-    def test_no_switch_when_visible(self):
-        engine = FakeEngine(CFG, [win_with(["装柜提醒bot"])])
-        result = ensure_organization(engine, None)
-        self.assertEqual(result, {"switched": False})
-        self.assertEqual(engine.sleeps, 0)
-
-    def test_unconfigured_noop(self):
-        engine = FakeEngine({}, [win_with(["任何内容"])])
-        self.assertEqual(ensure_organization(engine, None), {"switched": False})
-
-    def test_switcher_missing_raises(self):
-        # 目标组织不可见，且窗口里没有头像按钮 → 明确报错而不是乱点
-        engine = FakeEngine(CFG, [win_with(["弗忧的内容"])])
-        with self.assertRaises(KeeperError) as ctx:
-            ensure_organization(engine, None)
-        self.assertIn("Avatar/org button not found", str(ctx.exception))
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_failed_switch_not_reported_success(self):
+        self.ax.click = lambda row, window: self.ax.app['AXWindows'].remove(self.popup)
+        with self.assertRaises(KeeperError) as caught: ensure_organization(self.engine_instance, None)
+        self.assertEqual(caught.exception.code, 'organization_switch_timeout')

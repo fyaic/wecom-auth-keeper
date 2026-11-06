@@ -12,7 +12,7 @@ FILES = ['LICENSE', 'requirements-macos.txt', 'renew.py', 'maintain.py', 'keeper
          'keeper_common.py', 'keeper_navigation.py', 'keeper_organization.py', 'keeper_maintenance.py',
          'keeper_capabilities.py', 'config.maintenance.example.json',
          'delivery/onboard.py', 'delivery/verify_bundle.py', 'delivery/START-HERE.md',
-         'delivery/AGENT-INSTALL.md', 'delivery/DESIGN.md', 'delivery/acceptance.example.json']
+         'delivery/AGENT-INSTALL.md', 'delivery/DESIGN.md', 'delivery/VALIDATION.md', 'delivery/acceptance.example.json']
 
 
 def build(output):

@@ -38,6 +38,12 @@ def load_config(path, *, probes=False):
     for key in ("bridge_send_link", "bridge_monitor", "chat_history_navigation"):
         if key in cfg and not isinstance(cfg[key], bool):
             raise KeeperError("invalid_config", f"{key} must be boolean", 3)
+    if 'organization_navigation' in cfg:
+        if cfg['organization_navigation'] != 'sidebar-5.0.13':
+            raise KeeperError('invalid_config', 'Unknown organization adapter', 3)
+        name = cfg.get('organization_selector_name')
+        if not isinstance(name, str) or not name.strip() or name.strip().startswith('<'):
+            raise KeeperError('invalid_config', 'Exact organization_selector_name is required', 3)
     for key, default in (("probe_timeout", 90), ("renew_timeout", 240), ("lock_wait", 10)):
         value = cfg.setdefault(key, default)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 < value <= 600:

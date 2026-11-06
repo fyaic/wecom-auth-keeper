@@ -1,95 +1,93 @@
-"""Ensure the desktop WeCom sits on the target organization before navigation.
-
-多组织账号下，桌面企微停留在别的组织时聊天导航必然失败（navigation_target_not_found）。
-本模块在导航前检查主窗口是否可见目标组织标记；不可见则点头像 → 组织面板 → 点目标组织行。
-只做组织切换，不改任何权限；面板不存在目标组织时报错而非乱点。
-"""
-import keeper_ax
+"""Verified organization rows; calibrated 5.0.13 sidebar entry, never avatar/chat hints."""
 from keeper_common import KeeperError
-
-ORG_ROW_HINTS = ("有限公司", "组织")  # 面板行的兜底特征（仅日志用）
-
-
-def _text(ax, node):
-    for key in ("AXTitle", "AXDescription", "AXValue", "AXStringValue"):
-        value = ax.ax_get(node, key)
-        if value and isinstance(value, str) and value.strip():
-            return value
-    return ""
+from keeper_navigation import global_search
 
 
-def _walk(ax, node, depth=0):
-    yield node, depth
-    for child in (ax.ax_get(node, "AXChildren") or []):
-        yield from _walk(ax, child, depth + 1)
+def walk(ax, root):
+    stack = [(root, 0)]
+    count = 0
+    while stack:
+        node, depth = stack.pop()
+        count += 1
+        if count > 1500 or depth > 20:
+            raise KeeperError('tree_incomplete', 'Organization menu exceeds bounds')
+        yield node
+        stack.extend((c, depth + 1) for c in ax.ax_get(node, 'AXChildren') or [])
 
 
-def _main_window(ax, app):
-    best = None
-    for window in ax.ax_get(app, "AXWindows") or []:
-        frame = ax.frame(window)
-        if frame and frame[2] >= 500 and (best is None or frame[2] > ax.frame(best)[2]):
-            best = window
-    if best is None:
-        raise KeeperError("window_unavailable", "No main WeCom window", 3)
-    return best
-
-
-def _markers(cfg):
-    name = cfg.get("organization_name") or ""
-    hints = [name] + list(cfg.get("organization_markers") or ())
-    return [h for h in hints if h]
-
-
-def org_visible(ax, app, cfg):
-    """Target-org content currently visible in the main window (chat list shows its chats)."""
-    window = _main_window(ax, app)
-    markers = _markers(cfg)
-    if not markers:
-        return True  # 未配置组织名：不做检查（单组织账号无需此步）
-    for node, _depth in _walk(ax, window):
-        for marker in markers:
-            if marker and marker in _text(ax, node):
-                return True
-    return False
+def menu_rows(engine):
+    """Only rows in native corp menus, not matching names in chats or web pages."""
+    ax = engine.ax
+    result = []
+    for window in ax.ax_get(engine.app, 'AXWindows') or []:
+        f = ax.frame(window)
+        if not f or not 150 <= f[2] <= 400:
+            continue
+        for row in walk(ax, window):
+            if ax.ax_get(row, 'AXRole') != 'AXRow':
+                continue
+            nodes = list(walk(ax, row))
+            icons = {str(ax.ax_get(n, 'AXDescription') or '') for n in nodes
+                     if ax.ax_get(n, 'AXRole') == 'AXImage'}
+            if not icons & {'icon corp list selected', 'icon corp list unselected'}:
+                continue
+            names = [engine.text(n) for n in nodes if ax.ax_get(n, 'AXRole') == 'AXStaticText']
+            if len(names) == 1:
+                result.append((names[0], 'icon corp checkmark' in icons, row, window))
+    return result
 
 
 def ensure_organization(engine, native):
-    """Switch to cfg['organization_name'] if its content is not visible. Idempotent."""
-    ax, app = engine.ax, engine.ax.application()[1]
-    if org_visible(ax, app, engine.cfg):
-        return {"switched": False}
-    name = engine.cfg.get("organization_name")
+    name = engine.cfg.get('organization_selector_name')
     if not name:
-        return {"switched": False}  # 未配置不检查
-    window = _main_window(ax, app)
-    frame = ax.frame(window)
-    # 头像按钮：主窗口左上角区域的 Button（实测 62x38）
-    avatar = None
-    for node, _depth in _walk(ax, window):
-        if ax.ax_get(node, "AXRole") != "AXButton":
-            continue
-        f = ax.frame(node)
-        if (f and frame[0] - 5 <= f[0] <= frame[0] + 90
-                and frame[1] - 5 <= f[1] <= frame[1] + 70
-                and 30 <= f[2] <= 90 and 25 <= f[3] <= 60):
-            avatar = node
-            break
-    if avatar is None:
-        raise KeeperError("org_switcher_not_found", "Avatar/org button not found in main window", 3)
-    ax.click(avatar, window)
-    engine.sleep(2)
-    # 面板内找目标组织行
-    row = None
-    for node, _depth in _walk(ax, window):
-        if name in _text(ax, node):
-            row = node
-            break
-    if row is None:
-        raise KeeperError("organization_not_listed",
-                          f"Target organization row not found in switcher panel: {name}", 3)
-    ax.click(row, window)
-    # 等组织内容出现（切换有加载过程）
-    engine.wait(lambda: org_visible(ax, engine.ax.application()[1], engine.cfg), bool,
-                "organization_switch_timeout", timeout=25)
-    return {"switched": True, "organization": name}
+        raise KeeperError('organization_profile_required', 'Configure exact menu name and validated sidebar profile')
+    if engine.cfg.get('organization_navigation') != 'sidebar-5.0.13' or engine.ax.client_version(native) != '5.0.13':
+        raise KeeperError('organization_version_unsupported', 'Organization adapter requires verified WeCom 5.0.13')
+    ax = engine.ax
+    windows = [w for w in ax.ax_get(engine.app, 'AXWindows') or [] if global_search(engine, w) is not None]
+    if len(windows) != 1:
+        raise KeeperError('org_switcher_not_found', 'Expected one native chat window')
+    main = windows[0]
+    engine.focus_window(native, main, 'org_switcher_not_found')
+
+    def entry():
+        current = [w for w in ax.ax_get(engine.app, 'AXWindows') or [] if global_search(engine, w) is not None]
+        if len(current) != 1:
+            raise KeeperError('org_switcher_not_found', 'Main window changed ambiguously')
+        ax.open_organization_menu(native, engine.app, current[0])
+
+    def close_menu():
+        current = [w for w in ax.ax_get(engine.app, 'AXWindows') or [] if global_search(engine, w) is not None]
+        if len(current) != 1:
+            raise KeeperError('org_switcher_not_found', 'Cannot safely dismiss organization menu')
+        ax.click(global_search(engine, current[0]), current[0])
+        engine.wait(lambda: menu_rows(engine), lambda r: not r, 'organization_menu_close_timeout', timeout=5)
+
+    def open_menu():
+        rows = menu_rows(engine)
+        if not rows:
+            # 5.0.13 exposes the bottom org icon with invalid AX bounds. Only
+            # this version-gated entry click uses calibrated window-relative geometry.
+            entry()
+            rows = engine.wait(lambda: menu_rows(engine), bool, 'org_switcher_not_found', timeout=4)
+        return rows
+
+    rows = open_menu()
+    matches = [r for r in rows if r[0] == name]
+    if len(matches) != 1 or sum(r[1] for r in rows) != 1:
+        # Close only the menu we opened; no guessed row or substring selection.
+        close_menu()
+        raise KeeperError('organization_not_listed', 'Exact unique organization row / selected marker unavailable')
+    previous = next(r[0] for r in rows if r[1])
+    if previous == name:
+        close_menu()
+        return {'switched': False, 'organization': name}
+    ax.click(matches[0][2], matches[0][3])
+    engine.wait(lambda: menu_rows(engine), lambda r: not r, 'organization_switch_timeout', timeout=5)
+    engine.sleep(1)
+    rows = open_menu()
+    selected = [r[0] for r in rows if r[1]]
+    close_menu()
+    if selected != [name]:
+        raise KeeperError('organization_switch_timeout', 'Selected organization did not match target')
+    return {'switched': previous != name, 'organization': name}
