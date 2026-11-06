@@ -1,11 +1,12 @@
 """Reusable multi-permission, pre-expiry cycle. No model, Gateway or business probe dependency."""
+from contextlib import ExitStack
 from datetime import datetime, timedelta
 import json
 import math
 from pathlib import Path
 
 from keeper_common import KeeperError, atomic_json, emit_error
-from renew import Renewal
+from renew import Renewal, monitor_guard
 
 DEFAULT_POLICY = {"within_hours": 24, "interval_seconds": 3600,
                   "min_renew_interval_seconds": 3600, "retry_seconds": 300,
@@ -96,6 +97,7 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
     result = {"ok": False, "mode": "maintenance", "status": "failed", "rows": {},
               "business_verified": False, "pending_recovery": engine.journal.exists()}
     attempted = False
+    desktop_context = ExitStack()
 
     def save():
         atomic_json(path, state)
@@ -108,6 +110,7 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
         save()  # Each successful row survives failure of a subsequent row.
 
     try:
+        desktop_context.enter_context(monitor_guard(cfg))
         attempted = True
         window = engine.open(activate=True)  # Navigation is still opt-in in Keeper config.
         before = observe(engine, window)
@@ -165,6 +168,12 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
                 result["cleanup"] = {"ok": False, "error": "window_cleanup_failed"}
                 if result["ok"]:
                     result.update(ok=False, status="cleanup_failed", error="window_cleanup_failed")
+        try:
+            desktop_context.close()
+        except Exception as exc:
+            error, _ = emit_error(exc)
+            result.update(error)
+            result["status"] = "monitor_restore_failed"
     result["pending_recovery"] = engine.journal.exists()
     result["checked_at"] = now().isoformat(timespec="seconds")
     if result["ok"]:

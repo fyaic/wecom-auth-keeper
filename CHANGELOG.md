@@ -8,6 +8,13 @@
 
 ## Unreleased
 
+### Remote acceptance fixes — 2026-11-06
+
+- Apply optional Bridge monitor coordination to scheduled maintenance, including navigation and window cleanup. The supervising parent holds the desktop lock and restores the prior mode after worker timeout.
+- Record restoration errors as failures instead of reporting a successful cycle.
+- Prefer a locally verified authorization link in the target Bot's private chat; require reopening it from another conversation in device acceptance.
+- Remote device acceptance is still in progress; these changes do not establish general macOS compatibility.
+
 ### Agent-assisted distribution preview — 2026-11-06
 
 - Audit all branches against main 1722b10; preserve existing production worktrees and deployment state.

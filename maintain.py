@@ -9,9 +9,9 @@ import subprocess
 import sys
 
 from keeper_capabilities import CAPABILITY_GROUPS
-from keeper_common import KeeperError, emit_error, executable, gui_lock_path, load_config, process_lock
+from keeper_common import KeeperError, atomic_json, emit_error, executable, gui_lock_path, load_config, process_lock
 from keeper_maintenance import policy, read_state, run_cycle
-from renew import Renewal
+from renew import Renewal, monitor_guard
 
 
 def validate_destinations(cfg):
@@ -52,6 +52,20 @@ def write_launchagent(cfg, output):
 
 
 def supervise(cfg, *, run=subprocess.run):
+    # The parent keeps ownership through worker termination and cleanup. A killed
+    # worker cannot run its finally block, so it cannot own monitor restoration.
+    with process_lock(gui_lock_path(), cfg["lock_wait"]):
+        try:
+            with monitor_guard(cfg):
+                return supervised_worker(cfg, run=run)
+        except Exception as exc:
+            result, _ = emit_error(exc)
+            result.update(mode="maintenance", status="monitor_coordination_failed", business_verified=False)
+            atomic_json(cfg["state_file"], result)
+            return result, 2
+
+
+def supervised_worker(cfg, *, run=subprocess.run):
     """Bound the worker lifetime, including native AX calls; timeout never claims success."""
     python = executable(cfg.get("venv_python"), sys.executable)
     args = [python, str(Path(__file__).resolve()), "--config", cfg["_config_path"], "--worker"]
@@ -108,8 +122,8 @@ def main(argv=None):
                 if sys.platform != "darwin":
                     raise KeeperError("unsupported_platform", "Scheduled desktop maintenance requires macOS", 3)
                 import keeper_ax as ax
-                with process_lock(gui_lock_path(), cfg["lock_wait"]):
-                    result, code = run_cycle(cfg, ax)
+                # Internal worker: the supervising parent holds the desktop lock.
+                result, code = run_cycle(cfg, ax)
             else:
                 result, code = supervise(cfg)
     except Exception as exc:

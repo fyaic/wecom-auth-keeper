@@ -14,6 +14,42 @@ from test_keeper import Fixture, FakeAX
 
 
 class MaintenanceTests(Fixture):
+    def test_bridge_monitor_is_observe_until_cleanup_and_restored_on_navigation_failure(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
+        mode = ['active']
+        def request(cfg, method, path, body=None):
+            if body:
+                mode[0] = body['mode']
+            return {'mode': mode[0]}
+        def opened(**kwargs):
+            self.assertEqual(mode[0], 'observe')
+            raise KeeperError('navigation_target_changed', 'test')
+        def closed():
+            self.assertEqual(mode[0], 'observe')
+            return {'ok': True, 'closed': False}, 0
+        engine.close_window.side_effect = closed
+        with patch('renew.bridge_request', side_effect=request), patch.object(engine, 'open', side_effect=opened):
+            result, code = self.cycle(ax, engine)
+        self.assertEqual((code, result['error']), (2, 'navigation_target_changed'))
+        self.assertEqual(mode[0], 'active')
+        self.assertTrue(result['cleanup']['ok'])
+
+    def test_bridge_restore_failure_is_persisted_as_failure_after_successful_renewal(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
+        def request(cfg, method, path, body=None):
+            if body == {'mode': 'active'}:
+                raise KeeperError('bridge_error', 'restore failed')
+            return {'mode': body['mode'] if body else 'active'}
+        with patch('renew.bridge_request', side_effect=request):
+            result, code = self.cycle(ax, engine)
+        self.assertEqual(code, 2)
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['rows']['发送消息']['action'], 'pre_renewed')
+        self.assertEqual(self.scheduler()['failures'], 1)
+        self.assertFalse(json.loads(Path(self.cfg['state_file']).read_text())['ok'])
+
     def setup_cycle(self, rows=None):
         self.cfg['target_rows'] = rows or ['发送消息', '搜索与获取文档内容', '新建与编辑文档',
                                           '搜索与获取微盘文件内容', '上传与更新微盘文件',
@@ -190,6 +226,23 @@ class MaintenanceTests(Fixture):
         self.assertTrue(result['cleanup']['ok'])
         self.assertIn('--worker',runner.call_args_list[0].args[0])
         self.assertIn('--close-window',runner.call_args_list[1].args[0])
+
+    def test_supervisor_restores_monitor_after_worker_timeout_and_cleanup(self):
+        self.cfg.update(venv_python=sys.executable, bridge_monitor=True, bridge_url='http://localhost')
+        mode = ['active']
+        def request(cfg, method, path, body=None):
+            if body:
+                mode[0] = body['mode']
+            return {'mode': mode[0]}
+        def runner(args, **kwargs):
+            self.assertEqual(mode[0], 'observe')
+            if '--worker' in args:
+                raise subprocess.TimeoutExpired(args, 1)
+            return subprocess.CompletedProcess([], 0, '{"ok":true,"closed":true}', '')
+        with patch('renew.bridge_request', side_effect=request):
+            result, code = maintain.supervise(self.cfg, run=runner)
+        self.assertEqual((code, result['status'], mode[0]), (2, 'timeout', 'active'))
+        self.assertTrue(result['cleanup']['ok'])
 
     def test_supervisor_rejects_contradictory_success_or_wrong_mode(self):
         self.cfg['venv_python'] = sys.executable
