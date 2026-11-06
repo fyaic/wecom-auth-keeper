@@ -71,4 +71,4 @@
 
 构建只从提交中的固定文件列表取内容，拒绝核心文件未提交修改。执行 `python3 delivery/build_bundle.py --output /absolute/output/keeper-agent-preview.zip`。验证解压、manifest、无私有文件、无发包人路径、所有运行入口导入完整，然后交付 ZIP、外部校验文件及 START-HERE.md。不能直接压缩本地项目目录，也不包含 .git、.venv、私有输入、日志、状态或专属部署文档。
 
-正式版本还需：不同 Mac 上从空环境安装、同真实后台链路验收、其他设备的组织切换回归、Windows 后端和实体环境验证、可选签名/notarization/依赖镜像。当前成果是可审阅并可发给 macOS 试点用户的预览包，而不是这些门槛已全部完成。
+正式版本还需：不同 Mac 上从空环境安装、同真实后台链路验收、其他设备的组织切换回归、Windows 后端和实体环境验证、可选签名/notarization/依赖镜像。当前成果是本机已完成真实后台续期、干净解压安装与跨企业回归的 macOS 试点包；上述其他设备与 Windows 门槛尚未完成。
