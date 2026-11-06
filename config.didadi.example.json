@@ -18,7 +18,7 @@
   "lock_wait": 10,
   "maintenance": {
     "within_hours": 24,
-    "interval_seconds": 3600,
+    "interval_seconds": 21600,
     "min_renew_interval_seconds": 3600,
     "retry_seconds": 300,
     "close_window": true
