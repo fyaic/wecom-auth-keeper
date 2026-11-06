@@ -63,12 +63,27 @@ def bridge_request(cfg, method, path, body=None):
     return result
 
 
+def check_bridge_coordination(cfg):
+    # Observe disables message handling, not the independent organization
+    # rotator. A running rotator can dismiss our menus or change enterprises.
+    # Reject this known conflict before any GUI work or monitor mutation.
+    try:
+        rotator = bridge_request(cfg, "GET", "/wecom/orgs/rotator/status")
+    except Exception as exc:
+        raise KeeperError("desktop_coordination_unknown", "Cannot verify Bridge organization rotator state") from exc
+    if not isinstance(rotator.get("enabled"), bool) or not isinstance(rotator.get("running"), bool):
+        raise KeeperError("desktop_coordination_unknown", "Bridge did not provide an explicit organization rotator state")
+    if rotator["enabled"] or rotator["running"]:
+        raise KeeperError("desktop_coordination_required", "Bridge organization rotation requires shared desktop coordination; observe mode is insufficient")
+
+
 @contextmanager
 def monitor_guard(cfg):
     enabled = cfg.get("bridge_monitor", cfg.get("bridge_send_link", False))
     if not enabled:
         yield
         return
+    check_bridge_coordination(cfg)
     original = bridge_request(cfg, "GET", "/wecom/monitor/mode").get("mode")
     if original not in {"active", "observe"}:
         raise KeeperError("monitor_unknown", "Cannot establish the original bridge monitor mode")
@@ -338,6 +353,8 @@ class Renewal:
 
     def run(self, mode, existing_only=False, within_hours=24):
         # Inspection does not send messages or alter bridge state.
+        if mode == "check" and self.cfg.get("bridge_monitor", self.cfg.get("bridge_send_link", False)):
+            check_bridge_coordination(self.cfg)
         cfg = self.cfg if mode != "check" else {**self.cfg, "bridge_monitor": False}
         with monitor_guard(cfg):
             window = self.open(existing_only, mode != "check" and self.cfg.get("bridge_send_link", False), activate=mode != "check")

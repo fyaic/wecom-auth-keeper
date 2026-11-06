@@ -192,9 +192,10 @@ class StateTests(Fixture):
     def test_check_never_sends_or_changes_monitor(self):
         self.cfg.update(bridge_send_link=True,bridge_monitor=True)
         ax=FakeAX(self.cfg)
-        with patch('renew.bridge_request') as http:
+        with patch('renew.bridge_request', return_value={'enabled':False,'running':False}) as http:
             self.engine(ax).run('check',True)
-        http.assert_not_called();self.assertEqual(ax.clicks,[])
+        http.assert_called_once_with(self.cfg, 'GET', '/wecom/orgs/rotator/status')
+        self.assertEqual(ax.clicks,[])
 
     def test_negative_coordinates_are_not_rejected_by_row_parser(self):
         ax=FakeAX(self.cfg)
@@ -215,10 +216,31 @@ class StateTests(Fixture):
 
     def test_monitor_restores_prior_mode_on_exception(self):
         self.cfg.update(bridge_monitor=True,bridge_url='http://localhost')
-        with patch('renew.bridge_request',side_effect=[{'mode':'observe'},{'mode':'observe'},{'mode':'observe'}]) as http:
+        with patch('renew.bridge_request',side_effect=[{'enabled':False,'running':False},{'mode':'observe'},{'mode':'observe'},{'mode':'observe'}]) as http:
             with self.assertRaises(ValueError):
                 with renew.monitor_guard(self.cfg):raise ValueError('test')
         self.assertEqual(http.call_args.args[-1],{'mode':'observe'})
+
+    def test_active_bridge_rotation_blocks_before_gui_and_mode_changes(self):
+        self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
+        for status in ({'enabled':True,'running':True}, {'enabled':True,'running':False},
+                       {'enabled':False,'running':True}):
+            with patch('renew.bridge_request', return_value=status) as http:
+                with self.assertRaises(KeeperError) as caught:
+                    with renew.monitor_guard(self.cfg):
+                        self.fail('Must not enter desktop operation')
+            self.assertEqual(caught.exception.code, 'desktop_coordination_required')
+            self.assertEqual(http.call_count, 1)
+            self.assertEqual(http.call_args.args[1], 'GET')
+
+    def test_unknown_bridge_rotation_cannot_claim_exclusive_desktop(self):
+        self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
+        for status in ({}, {'enabled':False}, {'enabled':'false','running':False}):
+            with patch('renew.bridge_request', return_value=status):
+                with self.assertRaises(KeeperError) as caught:
+                    with renew.monitor_guard(self.cfg):
+                        self.fail('Must not enter desktop operation')
+            self.assertEqual(caught.exception.code, 'desktop_coordination_unknown')
 
 
 class ProbeTests(Fixture):

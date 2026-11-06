@@ -14,11 +14,22 @@ from test_keeper import Fixture, FakeAX
 
 
 class MaintenanceTests(Fixture):
+    def test_active_rotator_prevents_worker_launch(self):
+        self.cfg.update(venv_python=sys.executable, bridge_monitor=True, bridge_url='http://localhost')
+        runner = Mock()
+        with patch('renew.bridge_request', return_value={'enabled':True,'running':True}):
+            result, code = maintain.supervise(self.cfg, run=runner)
+        runner.assert_not_called()
+        self.assertEqual((code, result['error']), (2, 'desktop_coordination_required'))
+        self.assertFalse(result['ok'])
+
     def test_bridge_monitor_is_observe_until_cleanup_and_restored_on_navigation_failure(self):
         ax, engine = self.setup_cycle(['发送消息'])
         self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
         mode = ['active']
         def request(cfg, method, path, body=None):
+            if path == '/wecom/orgs/rotator/status':
+                return {'enabled': False, 'running': False}
             if body:
                 mode[0] = body['mode']
             return {'mode': mode[0]}
@@ -39,6 +50,8 @@ class MaintenanceTests(Fixture):
         ax, engine = self.setup_cycle(['发送消息'])
         self.cfg.update(bridge_monitor=True, bridge_url='http://localhost')
         def request(cfg, method, path, body=None):
+            if path == '/wecom/orgs/rotator/status':
+                return {'enabled': False, 'running': False}
             if body == {'mode': 'active'}:
                 raise KeeperError('bridge_error', 'restore failed')
             return {'mode': body['mode'] if body else 'active'}
@@ -231,6 +244,8 @@ class MaintenanceTests(Fixture):
         self.cfg.update(venv_python=sys.executable, bridge_monitor=True, bridge_url='http://localhost')
         mode = ['active']
         def request(cfg, method, path, body=None):
+            if path == '/wecom/orgs/rotator/status':
+                return {'enabled': False, 'running': False}
             if body:
                 mode[0] = body['mode']
             return {'mode': mode[0]}

@@ -39,10 +39,12 @@ cp config.example.json config.json
 | `lock_wait` | 等待进程锁的秒数；超时退出 4 |
 | `chat_history_navigation` | 可选原生聊天记录导航，默认 false；要求已有匹配的官方授权链接 |
 | `bridge_send_link` | 可选：通过 bridge 发授权链接；默认 false |
-| `bridge_monitor` | 可选：操作前切 observe、完成后恢复原模式；默认 false，与发送开关独立 |
+| `bridge_monitor` | 可选：先检查 Bridge 组织轮转；关闭时切 observe 并在结束恢复，启用时拒绝操作；默认 false |
 | `bridge_url` / `notify_to` | 可选 bridge HTTP 地址与通知接收人；默认不通知 |
 
 从已有的 850003 报错帮助链接或正确机器人的管理权限页取得身份参数；不要为了取链接让业务故意过期。CLI 当前凭据必须对应同一 bot——配置页身份校验不自动验证 CLI 凭据归属，部署者应核对。
+
+Bridge 的 observe 不会停止组织轮转，也不是所有 UI 服务共享的桌面锁。当前候选遇到启用轮转返回 `desktop_coordination_required`，状态接口缺失/无效返回 `desktop_coordination_unknown`。不得关闭检查或暂停生产服务后宣称无人值守验收通过；共存需要单独实现并验证桌面互斥。
 
 旧 `wecom_bridge_src` 配置不再需要。旧配置未指定 `bridge_monitor` 时，保持与 `bridge_send_link` 一致的兼容行为；建议显式设定。
 

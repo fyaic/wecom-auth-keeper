@@ -1,6 +1,6 @@
 from unittest.mock import patch
 from keeper_common import KeeperError
-from keeper_organization import menu_rows, ensure_organization, list_organizations
+from keeper_organization import menu_rows, ensure_organization, list_organizations, stable_menu
 from test_keeper import Fixture, node
 from test_navigation import NavigationAX
 
@@ -89,3 +89,24 @@ class OrganizationTests(Fixture):
         self.popup['AXChildren'].append(corp('target'))
         with self.assertRaises(KeeperError): list_organizations(self.engine_instance, None)
         self.assertNotIn(self.popup, self.ax.app['AXWindows'])
+
+    def test_popup_rebuild_waits_for_complete_selection_and_stable_rows(self):
+        empty = []
+        partial = [('other', False, None, None)]
+        complete = [('other', True, None, None), ('target', False, None, None)]
+        with patch('keeper_organization.menu_rows', side_effect=[empty, partial, complete, complete]) as read:
+            self.assertEqual(stable_menu(self.engine_instance), complete)
+        self.assertEqual(read.call_count, 4)
+
+    def test_switch_waits_past_stale_selected_marker(self):
+        before = [('other', True, None, None), ('target', False, None, None)]
+        after = [('other', False, None, None), ('target', True, None, None)]
+        with patch('keeper_organization.menu_rows', side_effect=[before, before, after, after]) as read:
+            self.assertEqual(stable_menu(self.engine_instance, selected='target'), after)
+        self.assertEqual(read.call_count, 4)
+
+    def test_disappearing_popup_is_not_a_verified_switch(self):
+        with patch('keeper_organization.menu_rows', return_value=[]):
+            with self.assertRaises(KeeperError) as caught:
+                stable_menu(self.engine_instance, selected='target', error='organization_switch_timeout')
+        self.assertEqual(caught.exception.code, 'organization_switch_timeout')
