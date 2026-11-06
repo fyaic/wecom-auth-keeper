@@ -225,7 +225,7 @@ class MaintenanceTests(Fixture):
         self.assertEqual((code,result['status']), (2,'timeout'))
         self.assertTrue(result['cleanup']['ok'])
         self.assertIn('--worker',runner.call_args_list[0].args[0])
-        self.assertIn('--close-window',runner.call_args_list[1].args[0])
+        self.assertIn('--cleanup-worker',runner.call_args_list[1].args[0])
 
     def test_supervisor_restores_monitor_after_worker_timeout_and_cleanup(self):
         self.cfg.update(venv_python=sys.executable, bridge_monitor=True, bridge_url='http://localhost')
@@ -243,6 +243,17 @@ class MaintenanceTests(Fixture):
             result, code = maintain.supervise(self.cfg, run=runner)
         self.assertEqual((code, result['status'], mode[0]), (2, 'timeout', 'active'))
         self.assertTrue(result['cleanup']['ok'])
+
+    def test_cleanup_worker_does_not_reacquire_parent_desktop_lock(self):
+        with patch('maintain.load_config', return_value=self.cfg), \
+             patch('maintain.process_lock', side_effect=AssertionError('parent already owns lock')), \
+             patch.dict(sys.modules, {'keeper_ax': Mock()}), \
+             patch('maintain.sys.platform', 'darwin'), \
+             patch.object(maintain.Renewal, 'close_window', return_value=({'ok':True,'closed':True},0)) as close, \
+             patch('sys.stdout', new_callable=io.StringIO) as output:
+            self.assertEqual(maintain.main(['--cleanup-worker']), 0)
+        close.assert_called_once()
+        self.assertTrue(json.loads(output.getvalue())['closed'])
 
     def test_supervisor_rejects_contradictory_success_or_wrong_mode(self):
         self.cfg['venv_python'] = sys.executable

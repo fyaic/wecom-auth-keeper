@@ -84,8 +84,10 @@ def supervised_worker(cfg, *, run=subprocess.run):
                   "business_verified": False}
         if policy(cfg)["close_window"]:
             try:
-                child = run([python, str(Path(__file__).with_name("renew.py")), "--config", cfg["_config_path"],
-                             "--close-window"], capture_output=True, text=True, timeout=30)
+                # This child shares the parent's protected cycle; renew.py's
+                # public --close-window would try to acquire the same lock again.
+                child = run([python, str(Path(__file__).resolve()), "--config", cfg["_config_path"],
+                             "--cleanup-worker"], capture_output=True, text=True, timeout=30)
                 closed = json.loads(child.stdout)
                 result["cleanup"] = {"ok": child.returncode == 0 and closed.get("ok") is True}
             except Exception:
@@ -103,6 +105,7 @@ def main(argv=None):
     mode.add_argument("--status", action="store_true", help="Read historical scheduler evidence without accessing WeCom")
     mode.add_argument("--write-launchagent", metavar="PATH", help="Generate a launchd job; does not install or start it")
     mode.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    mode.add_argument("--cleanup-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     try:
         if args.list_capabilities:
@@ -118,12 +121,12 @@ def main(argv=None):
                 result, code = {"ok": True, "mode": "status", "historical": True, "policy": settings,
                                 "permissions": state["permissions"], "failures": state["failures"],
                                 "next_retry_at": state["next_retry_at"]}, 0
-            elif args.worker:
+            elif args.worker or args.cleanup_worker:
                 if sys.platform != "darwin":
                     raise KeeperError("unsupported_platform", "Scheduled desktop maintenance requires macOS", 3)
                 import keeper_ax as ax
                 # Internal worker: the supervising parent holds the desktop lock.
-                result, code = run_cycle(cfg, ax)
+                result, code = Renewal(cfg, ax).close_window() if args.cleanup_worker else run_cycle(cfg, ax)
             else:
                 result, code = supervise(cfg)
     except Exception as exc:

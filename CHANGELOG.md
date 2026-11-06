@@ -12,6 +12,7 @@
 
 - Apply optional Bridge monitor coordination to scheduled maintenance, including navigation and window cleanup. The supervising parent holds the desktop lock and restores the prior mode after worker timeout.
 - Record restoration errors as failures instead of reporting a successful cycle.
+- Use a dedicated cleanup child after timeout so cleanup does not reacquire the supervising parent's desktop lock.
 - Prefer a locally verified authorization link in the target Bot's private chat; require reopening it from another conversation in device acceptance.
 - Remote device acceptance is still in progress; these changes do not establish general macOS compatibility.
 
