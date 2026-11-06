@@ -11,7 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FILES = ['LICENSE', 'requirements-macos.txt', 'renew.py', 'maintain.py', 'keeper_ax.py',
          'keeper_common.py', 'keeper_navigation.py', 'keeper_organization.py', 'keeper_maintenance.py',
          'keeper_capabilities.py', 'config.maintenance.example.json',
-         'delivery/onboard.py', 'delivery/verify_bundle.py', 'delivery/START-HERE.md',
+         'delivery/onboard.py', 'delivery/verify_bundle.py', 'delivery/gui.py', 'delivery/discover.py', 'delivery/START-HERE.md',
          'delivery/AGENT-INSTALL.md', 'delivery/DESIGN.md', 'delivery/VALIDATION.md', 'delivery/acceptance.example.json']
 
 

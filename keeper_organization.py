@@ -37,6 +37,30 @@ def menu_rows(engine):
     return result
 
 
+def list_organizations(engine, native):
+    """Read exact native menu names and selection, then dismiss the menu."""
+    if engine.ax.client_version(native) != '5.0.13':
+        raise KeeperError('organization_version_unsupported', 'Organization discovery requires verified WeCom 5.0.13')
+    ax = engine.ax
+    windows = [w for w in ax.ax_get(engine.app, 'AXWindows') or [] if global_search(engine, w) is not None]
+    if len(windows) != 1:
+        raise KeeperError('org_switcher_not_found', 'Open the native Messages view before organization discovery')
+    main = windows[0]
+    engine.focus_window(native, main, 'org_switcher_not_found')
+    try:
+        if not menu_rows(engine):
+            ax.open_organization_menu(native, engine.app, main)
+        rows = engine.wait(lambda: menu_rows(engine), bool, 'org_switcher_not_found', timeout=4)
+        names = [r[0] for r in rows]
+        if len(set(names)) != len(names) or sum(r[1] for r in rows) != 1:
+            raise KeeperError('organization_not_listed', 'Unique organization names and one selected marker required')
+        return [{'name': r[0], 'selected': r[1]} for r in rows]
+    finally:
+        if menu_rows(engine):
+            ax.click(global_search(engine, main), main)
+            engine.wait(lambda: menu_rows(engine), lambda r: not r, 'organization_menu_close_timeout', timeout=5)
+
+
 def ensure_organization(engine, native):
     name = engine.cfg.get('organization_selector_name')
     if not name:

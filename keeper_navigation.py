@@ -60,7 +60,7 @@ def heading_matches(engine, window, search):
     return len(candidates) == 1
 
 
-def open_chat_history(engine, native):
+def open_chat(engine, native):
     windows = []
     for window in engine.ax.ax_get(engine.app, "AXWindows") or []:
         search = global_search(engine, window)
@@ -79,6 +79,11 @@ def open_chat_history(engine, native):
         engine.ax.submit_search(native, engine.app, window, search, engine.cfg["bot_chat_name"])
         engine.wait(lambda: heading_matches(engine, window, search), bool,
                     "navigation_target_not_found", timeout=8)
+    return window, search
+
+
+def open_chat_history(engine, native):
+    window, search = open_chat(engine, native)
 
     def history_fields():
         if not heading_matches(engine, window, search):

@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+from unittest.mock import patch, Mock
+from keeper_common import KeeperError
 
 ROOT = Path(__file__).resolve().parents[1]
 def module(name):
@@ -11,6 +13,8 @@ def module(name):
 onboard = module('onboard')
 verify = module('verify_bundle')
 builder = module('build_bundle')
+gui = module('gui')
+discovery = module('discover')
 
 class DeliveryTests(unittest.TestCase):
     def data(self):
@@ -60,3 +64,38 @@ class DeliveryTests(unittest.TestCase):
             self.assertTrue(verify.verify(p))
             (p/'a').write_text('changed'); self.assertFalse(verify.verify(p))
             manifest.write_text(json.dumps({'files':{'../outside':'bad'}}));self.assertFalse(verify.verify(p))
+
+    def test_gui_actions_use_public_bounded_maintenance_and_never_shell(self):
+        args = gui.command('maintain', '/path with space/python', '/private/config.json')
+        self.assertNotIn('--worker', args)
+        self.assertEqual(args[0], '/path with space/python')
+        self.assertEqual(Path(args[1]).name, 'maintain.py')
+        with patch.object(gui.sys, 'platform', 'win32'):
+            with self.assertRaisesRegex(ValueError, 'unsupported_automation_backend'):
+                gui.run_once('check', '/does/not/exist', '/unused')
+
+    def test_discovery_distinguishes_name_from_id_and_restores_original(self):
+        engine = Mock(); engine.cfg = {}; engine.visible_links.return_value = []
+        ax = Mock(); ax.application.return_value = (None, None)
+        selected = []
+        def select(e, _): selected.append(e.cfg['organization_selector_name'])
+        with patch.object(discovery, 'Renewal', return_value=engine), \
+             patch.object(discovery, 'list_organizations', return_value=[{'name':'A','selected':True},{'name':'B','selected':False}]), \
+             patch.object(discovery, 'ensure_organization', side_effect=select), \
+             patch.object(discovery, 'open_chat', return_value=(None,None)), \
+             patch.object(discovery, 'open_chat_history', side_effect=KeeperError('link_not_visible','missing')):
+            result = discovery.discover({},ax)
+        self.assertEqual(result['verified_organizations'], [])
+        self.assertEqual(result['status'], 'identity_review_required')
+        self.assertTrue(all(r['chat_name_matched'] for r in result['organizations']))
+        self.assertEqual(selected, ['A','B','A'])
+
+    def test_discovery_stops_on_focus_loss_and_restores_original(self):
+        engine = Mock(); engine.cfg = {}
+        ax = Mock(); ax.application.return_value = (None,None)
+        with patch.object(discovery,'Renewal',return_value=engine), \
+             patch.object(discovery,'list_organizations',return_value=[{'name':'A','selected':True}]), \
+             patch.object(discovery,'ensure_organization') as select, \
+             patch.object(discovery,'open_chat',side_effect=KeeperError('navigation_focus_lost','lost')):
+            with self.assertRaises(KeeperError): discovery.discover({},ax)
+        self.assertEqual(select.call_count,2)

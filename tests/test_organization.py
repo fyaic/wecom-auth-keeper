@@ -1,6 +1,6 @@
 from unittest.mock import patch
 from keeper_common import KeeperError
-from keeper_organization import menu_rows, ensure_organization
+from keeper_organization import menu_rows, ensure_organization, list_organizations
 from test_keeper import Fixture, node
 from test_navigation import NavigationAX
 
@@ -78,3 +78,14 @@ class OrganizationTests(Fixture):
         self.ax.click = lambda row, window: self.ax.app['AXWindows'].remove(self.popup)
         with self.assertRaises(KeeperError) as caught: ensure_organization(self.engine_instance, None)
         self.assertEqual(caught.exception.code, 'organization_switch_timeout')
+
+    def test_discovery_lists_exact_names_and_closes_without_switching(self):
+        self.assertCountEqual(list_organizations(self.engine_instance, None),
+                         [{'name': 'other', 'selected': True}, {'name': 'target', 'selected': False}])
+        self.assertNotIn(self.popup, self.ax.app['AXWindows'])
+        self.assertFalse(any(n.get('AXRole') == 'AXRow' for n in self.ax.clicks))
+
+    def test_discovery_rejects_ambiguous_menu_and_closes(self):
+        self.popup['AXChildren'].append(corp('target'))
+        with self.assertRaises(KeeperError): list_organizations(self.engine_instance, None)
+        self.assertNotIn(self.popup, self.ax.app['AXWindows'])

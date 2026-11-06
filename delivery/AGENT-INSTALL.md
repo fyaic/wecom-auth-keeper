@@ -11,7 +11,9 @@
 
 ## 1. 获取这台机器自己的身份和范围
 
-询问业务人员企业名、机器人名及需要哪些能力。利用本机已有 wecom-cli 的帮助、状态和身份查询确认当前 profile 的 Bot；CLI 命令随版本变化，先看本机 `--help`，不要猜参数，不自动 auth init 切换已在用的 Bot。
+从业务请求取得目标企业、机器人及需要的能力；已经说明“本机现有 CLI Bot”时直接发现身份，不重复询问。利用本机已有 wecom-cli 的帮助、状态和身份查询确认当前 profile 的 Bot；CLI 命令随版本变化，先看本机 `--help`，不要猜参数，不自动 auth init 切换已在用的 Bot。
+
+身份仅使用 `wecom-cli auth show --status`、`wecom-cli identity whoami` 和 `auth show` 的 Bot ID 字段。原始结果写私有文件，向上下文仅输出所需名字/一致性布尔值。禁止读取、打印或解密 `.encryption_key`、`credentials.enc`、Secret/token；它们不能解决组织定位，且不属于续期安装输入。名称过时或组织未知时，下一步是桌面组织发现，不能研究凭据加密格式。
 
 如果用户明确要求维护“本机已经配置的 wecom-cli Bot”，指定 profile 的现有身份就是排查起点，不要求业务人员重新提供可以在本机查出的信息。当前打开的会话、当前选中企业、新建测试 Bot 都不能代替 CLI 目标。多组织设备应先读取企业切换菜单，核对 CLI 身份所属组织及该组织的机器人管理页面；必要时逐个核对本机已登录组织，再用权限页双 Bot ID 确认。不同组织出现不同 Bot 是正常情况，不能据此擅自换绑 CLI，也不能只在错误组织反复搜索后要求业务人员手工定位。名称不一致先检查组织、身份和页面，再判断是否改名。只有本机证据无法消除的歧义才问用户，并说明已核对了哪些组织及缺少什么。
 
@@ -46,6 +48,14 @@ python3 -m venv .venv
 
 生成配置默认每小时检查、提前24小时续期、最大600秒运行、最后关页。不会自动开启组织切换。先让用户/Agent在正确企业下验证目标 Bot；后台需跨组织时，才按下面一节启用。安装路径要固定，移动路径或换 Python 后需重新验收系统权限与任务。
 
+多组织安装先使用包内后台发现工具，不手写 launchd 探针或只相信 Bridge 的缓存企业名。先让企业微信处于“消息”视图；以下命令在实际 GUI launchd 中使用配置指定的 Python，完成后卸载临时任务，证据目录每次必须为新目录：
+
+```bash
+.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action discover --evidence-dir /absolute/private/discovery-1
+```
+
+它逐个核对原生企业菜单和目标聊天，尝试读回已有官方入口，然后恢复原企业；不发送消息、不改授权。`chat_name_matched` 仅是名字候选，`link_identity_verified` 才表示发现双 Bot ID 匹配链接；即使 `ok=true`，`identity_review_required` 也不代表找到正确 Bot，更不代表续期通过。仅当唯一候选完成双身份核对，才填写 organization_selector_name 并启用 sidebar-5.0.13。未发现入口时按下一节核对机器人权限页、准备首次入口。必须保留每个组织的发现结果，不能只查当前企业就放弃。
+
 ## 3. 企业与页面导航验收
 
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。
@@ -66,6 +76,8 @@ python3 -m venv .venv
    远程终端/SSH 仅负责安装和读取结果。SSH 链的 AX 检查失败不能证明用户桌面的 launchd Python 也失败；应使用该登录用户的 GUI launchd 临时任务运行同一个 Python，核对实际 AX 信任及读页结果，完成后卸载临时任务。不要为了方便 SSH 调试要求额外授予 sshd 辅助功能。系统权限设置完成后，重新从普通聊天/其他组织开始验收，不能由安装 Agent 预先打开权限页替代完整导航。
 3. **真实续期层**：对已确认白名单中的临近到期项运行 `maintain.py --config ...`。记录每项前后日期、pending 为 false、关页成功，并用同 Bot 的只读业务调用复查。业务写验证或发消息需用户另行授权。健康但未到阈值的检查只算检查通过。
 4. **提前验收（可选）**：如用户明确同意现在取消/重授一次，可用隔离配置/状态临时设 within_hours=168，只针对同意的权限。验收后恢复生产24小时，不让168小时进入生产任务。没有到期项、也没有该授权时，标记 renewal_pending；到自然窗口后观察真实续期，不能虚报完成。
+
+以上后台命令统一用 `delivery/gui.py --config ... --action check|close|maintain --evidence-dir <新的私有目录>`，每次只选一个 action。`maintain` 调用完整生产入口，不绕过监督器。`check` 后必须执行 `close`；`maintain` 自带 finally 关页。工具返回实际进程退出码与原始脚本结果，临时任务不会设置每小时调度。不要把任务登记成功、空日志、轮询 `launchctl print` 仍存在或模型文字结论当成完成。
 
 记录 `delivery/acceptance.example.json` 的副本到私有目录。只填实际证据。`entry_location` 记录实际入口位置；`entry_identity_verified` 记录私聊链接双身份核对；`entry_reopened_from_other_chat` 必须来自关页、切到其他会话后的后台重新导航结果，不能用当前打开的页面替代。多权限至少检查所有白名单项；某项成功不等于所有项成功。已有一个 Bot 的验收不能代表其他 Bot 或其他系统版本。
 
