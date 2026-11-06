@@ -37,6 +37,22 @@ class NativeTests(unittest.TestCase):
         board.clearContents.assert_called_once()
         board.writeObjects_.assert_not_called()
 
+    def test_search_retries_ignored_paste_once_with_focus_checks(self):
+        import keeper_ax
+        from contextlib import nullcontext
+        with patch.object(keeper_ax, 'click'), \
+             patch.object(keeper_ax, 'require_search_focus') as focus, \
+             patch.object(keeper_ax, 'temporary_clipboard', return_value=nullcontext()), \
+             patch.object(keeper_ax, 'NSPasteboard') as pasteboard, \
+             patch.object(keeper_ax, 'search_key') as key, \
+             patch.object(keeper_ax, 'ax_get', side_effect=['', 'fixture']), \
+             patch.object(keeper_ax.time, 'sleep'), \
+             patch.object(keeper_ax.time, 'monotonic', side_effect=[0, 4, 5]):
+            pasteboard.generalPasteboard.return_value.stringForType_.return_value = 'fixture'
+            keeper_ax.replace_search(None, None, None, None, 'fixture')
+            self.assertEqual(key.call_count, 4)
+            self.assertGreaterEqual(focus.call_count, 4)
+
     def test_search_keyboard_rejects_foreground_app_change(self):
         import keeper_ax
         native, other = Mock(), Mock()

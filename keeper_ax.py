@@ -62,14 +62,23 @@ def replace_search(native, app, window, element, text):
     time.sleep(0.15)
     require_search_focus(native, app, window, element)
     with temporary_clipboard(text):
-        search_key(native, app, window, element, 0, kCGEventFlagMaskCommand)  # Command-A
-        search_key(native, app, window, element, 9, kCGEventFlagMaskCommand)  # Command-V
-        deadline = time.monotonic() + 3
-        while ax_get(element, "AXValue") != text:
+        for attempt in range(2):
+            # A just-switched organization can ignore the first paste while its
+            # search view initializes. Retry once, only in the same verified field.
             require_search_focus(native, app, window, element)
-            if time.monotonic() >= deadline:
-                raise KeeperError("navigation_input_failed", "Search text was not accepted")
-            time.sleep(0.05)
+            if NSPasteboard.generalPasteboard().stringForType_(NSPasteboardTypeString) != text:
+                raise KeeperError("navigation_input_failed", "Clipboard changed during search")
+            search_key(native, app, window, element, 0, kCGEventFlagMaskCommand)
+            search_key(native, app, window, element, 9, kCGEventFlagMaskCommand)
+            deadline = time.monotonic() + 3
+            while ax_get(element, "AXValue") != text:
+                require_search_focus(native, app, window, element)
+                if time.monotonic() >= deadline:
+                    break
+                time.sleep(0.05)
+            else:
+                return
+        raise KeeperError("navigation_input_failed", "Search text was not accepted")
 
 
 def submit_search(native, app, window, element, expected):
