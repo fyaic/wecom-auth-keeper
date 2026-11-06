@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Agent-assisted distribution preview — 2026-11-06
+
+- Audit all branches against main 1722b10; preserve existing production worktrees and deployment state.
+- Add portable device detection, identity-checked private macOS configuration, an agent installation runbook and business-user handoff.
+- Build a source ZIP from an explicit committed allowlist with a manifest and external checksum; exclude business-specific configuration and raw AX diagnostic tools.
+- Document Windows backend design and acceptance gates without claiming Windows automation support or current multi-organization reliability.
+
+
 ### Reusable multi-permission scheduling — 2026-10-23
 
 - Add standalone `maintain.py`: default hourly scheduling and a 24-hour pre-expiry window for an explicit combination of capability labels, without Gateway or Codex dependencies.

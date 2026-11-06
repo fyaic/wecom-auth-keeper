@@ -1,5 +1,7 @@
 # wecom-auth-keeper
 
+业务人员分发预览版：[先读我](delivery/START-HERE.md) · [安装 Agent 协议](delivery/AGENT-INSTALL.md) · [Git 审计、跨平台设计与发布边界](delivery/DESIGN.md)。macOS 逐设备验收；Windows 暂无自动续期后端。
+
 **企业微信七天能力授权的检测与恢复工具。**
 
 让依赖 `wecom-cli` 的报表、表格同步和 Agent 工作流，在授权到期时有明确的恢复路径。

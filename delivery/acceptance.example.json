@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "release_commit": null,
+  "os": null,
+  "client_version": null,
+  "cli_version": null,
+  "identity_matched_live": false,
+  "permission_count": 0,
+  "organization_navigation": "not_tested",
+  "background_inspection": "not_tested",
+  "renewal": "not_tested",
+  "all_selected_permissions_verified": false,
+  "expiry_extended": false,
+  "pending_recovery": null,
+  "window_cleanup": "not_tested",
+  "business_probe": "not_tested",
+  "scheduler": "not_installed",
+  "observed_at": null,
+  "blocking_code": null
+}
