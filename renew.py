@@ -180,6 +180,9 @@ class Renewal:
         self.sleep(1)
         links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
         if not links and self.cfg.get("chat_history_navigation", False):
+            # 多组织账号：桌面停在别的组织时导航必失败——先确保在目标组织（2026-11-06）。
+            from keeper_organization import ensure_organization
+            ensure_organization(self, native)
             from keeper_navigation import open_chat_history
             open_chat_history(self, native)
             links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])

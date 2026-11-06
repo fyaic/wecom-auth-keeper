@@ -1,5 +1,5 @@
 {
-  "_comment": "装柜提醒bot（嘀嗒嘀）多权限预续期配置模板。部署前需一次性播种：在桌面企业微信里打开与「装柜提醒bot」的聊天并发送授权链接（见 docs/warecheck-didadi-deploy.md §1b），引擎通过聊天记录导航找到该链接。target_rows 是唯一操作白名单：智能表格读写（文档两项）+ 搜索企业成员；发送消息在本企业不可用（853006），不加入。",
+  "_comment": "装柜提醒bot（嘀嗒嘀）多权限预续期配置模板。部署前需一次性播种：在桌面企业微信里打开与「装柜提醒bot」的聊天并发送授权链接（见 docs/warecheck-didadi-deploy.md §1b），引擎通过聊天记录导航找到该链接。target_rows 是唯一操作白名单：智能表格读写（文档两项）+ 搜索企业成员；发送消息在本企业不可用（853006），不加入。 organization_name/markers：多组织账号续期前自动切换到该组织。",
   "bot_chat_name": "装柜提醒bot",
   "aibotid": "<机器人管理权限页链接里的 aibotid>",
   "str_aibotid": "<机器人管理权限页链接里的 str_aibotid，应以 aib 开头且与 wecom-cli auth show 的 Bot ID 一致>",
@@ -22,5 +22,10 @@
     "min_renew_interval_seconds": 3600,
     "retry_seconds": 300,
     "close_window": true
-  }
+  },
+  "organization_name": "深圳市嘀嗒嘀物流科技有限公司",
+  "organization_markers": [
+    "深圳市嘀嗒嘀物流科技有限公司",
+    "装柜提醒bot"
+  ]
 }
