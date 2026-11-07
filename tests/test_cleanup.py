@@ -78,3 +78,53 @@ class CleanupTests(Fixture):
             ax, _, _ = self.setup_window()
             with patch.object(ax, 'ax_perform', return_value=status):
                 with self.assertRaises(KeeperError): self.engine(ax).close_window()
+
+    def setup_sheet(self):
+        ax, _, other = self.setup_window()
+        ax.client_version = lambda _: '5.0.13'
+        ax.action_names = lambda n: ['AXPress'] if n.get('AXRole') == 'AXButton' else []
+        ax.page['_frame'] = (100, 100, 720, 640)
+        heading = node('AXStaticText', '可使用权限', _frame=(148, 129, 80, 18))
+        close = node('AXButton', _frame=(744, 124, 28, 28))
+        ax.page['AXChildren'] = [heading, close, node('AXButton', '授权', _frame=(640, 250, 90, 32))]
+        sheet = node('AXSheet', children=[ax.page], _frame=ax.page['_frame'])
+        ax.page['AXParent'] = sheet
+        sheet['AXParent'] = ax.window
+        rows = [node('AXRow', _frame=(0, 100 + i * 56, 60, 56)) for i in range(9)]
+        ax.window['AXChildren'] = [node('AXTable', children=rows, _frame=(0, 100, 60, 504)), sheet]
+        return ax, sheet, close, heading, other
+
+    def test_verified_sheet_closes_without_main_window_or_authorization_action(self):
+        ax, sheet, button, _, other = self.setup_sheet()
+        def close(n, action):
+            self.assertIs(n, button)
+            self.assertEqual(action, 'AXPress')
+            ax.window['AXChildren'].remove(sheet)
+            return 0
+        with patch.object(ax, 'ax_perform', side_effect=close):
+            result, code = self.engine(ax).close_window()
+        self.assertEqual((result['closed_kind'], code), ('embedded-sheet', 0))
+        self.assertEqual(ax.app['AXWindows'], [ax.window, other])
+        self.assertEqual(ax.clicks, [])
+
+    def test_unverified_sheet_header_never_falls_back_to_main_window_close(self):
+        for change in ('version', 'title', 'named_button', 'geometry', 'extra_button', 'extra_page', 'ancestry'):
+            with self.subTest(change=change):
+                ax, sheet, button, heading, _ = self.setup_sheet()
+                if change == 'version': ax.client_version = lambda _: '5.0.14'
+                if change == 'title': heading['AXTitle'] = 'Other page'
+                if change == 'named_button': button['AXTitle'] = '授权'
+                if change == 'geometry': button['_frame'] = (740, 180, 28, 28)
+                if change == 'extra_button': ax.page['AXChildren'].append(node('AXButton', _frame=(700, 124, 28, 28)))
+                if change == 'extra_page': sheet['AXChildren'].append(node('AXWebArea'))
+                if change == 'ancestry': ax.page.pop('AXParent')
+                with patch.object(ax, 'ax_perform') as action:
+                    with self.assertRaises(KeeperError) as caught: self.engine(ax).close_window()
+                self.assertEqual(caught.exception.code, 'embedded_page_close_unavailable')
+                action.assert_not_called()
+
+    def test_ineffective_sheet_press_cannot_report_cleanup_success(self):
+        ax, _, _, _, _ = self.setup_sheet()
+        with patch.object(ax, 'ax_perform', return_value=0):
+            with self.assertRaises(KeeperError) as caught: self.engine(ax).close_window()
+        self.assertEqual(caught.exception.code, 'window_close_failed')

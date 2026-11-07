@@ -248,30 +248,39 @@ class Renewal:
             self.sleep(0.5)
 
     def close_window(self):
-        """Close only the verified standalone target window; never navigate or type."""
-        _, self.app = self.ax.application()
+        """Close the bound permission window/sheet, preserving the main window."""
+        native, self.app = self.ax.application()
         window = self.select_window()
         if window is None:
             return {"ok": True, "mode": "close-window", "closed": False}, 0
-        self.bound(window)
+        page = self.bound(window)
         from keeper_navigation import global_search, sidebar_rows
-        if global_search(self, window) is not None or sidebar_rows(self, window):
-            # Management pages in 5.0.13 embed the permission modal in the main
-            # WeCom window. Its traffic-light close button is NOT a modal close.
-            raise KeeperError('embedded_page_close_unavailable',
-                              'Permission page is embedded in the main window; native window close refused')
-        pages = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea"]
-        button = self.ax.ax_get(window, "AXCloseButton")
-        if (len(pages) != 1 or button is None
-                or self.ax.ax_get(button, "AXRole") != "AXButton"
-                or self.ax.ax_get(button, "AXSubrole") != "AXCloseButton"):
-            raise KeeperError("window_close_unavailable", "No unambiguous native close control for the target page")
+        embedded = global_search(self, window) is not None or bool(sidebar_rows(self, window))
+        if embedded:
+            from keeper_cleanup import embedded_close_button
+            button = embedded_close_button(self, native, window, page)
+            if button is None:
+                raise KeeperError('embedded_page_close_unavailable',
+                                  'No verified sheet close control; main window close refused')
+        else:
+            pages = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea"]
+            button = self.ax.ax_get(window, "AXCloseButton")
+            if (len(pages) != 1 or button is None
+                    or self.ax.ax_get(button, "AXRole") != "AXButton"
+                    or self.ax.ax_get(button, "AXSubrole") != "AXCloseButton"):
+                raise KeeperError("window_close_unavailable", "No unambiguous native close control for the target page")
         self.bound(window)
         if self.ax.ax_perform(button, "AXPress") != 0:
             raise KeeperError("window_close_failed", "Target window rejected its native close action")
-        self.wait(lambda: self.ax.ax_get(self.app, "AXWindows") or [],
-                  lambda windows: window not in windows, "window_close_failed", timeout=3)
-        return {"ok": True, "mode": "close-window", "closed": True}, 0
+        if embedded:
+            self.wait(self.select_window, lambda value: value is None, "window_close_failed", timeout=3)
+            if window not in (self.ax.ax_get(self.app, 'AXWindows') or []):
+                raise KeeperError('window_close_failed', 'Main window disappeared during sheet cleanup')
+        else:
+            self.wait(lambda: self.ax.ax_get(self.app, "AXWindows") or [],
+                      lambda windows: window not in windows, "window_close_failed", timeout=3)
+        return {"ok": True, "mode": "close-window", "closed": True,
+                "closed_kind": "embedded-sheet" if embedded else "standalone-window"}, 0
 
     def read_rows(self, window):
         page = self.bound(window)
