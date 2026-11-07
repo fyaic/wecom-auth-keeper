@@ -99,3 +99,35 @@ class DeliveryTests(unittest.TestCase):
              patch.object(discovery,'open_chat',side_effect=KeeperError('navigation_focus_lost','lost')):
             with self.assertRaises(KeeperError): discovery.discover({},ax)
         self.assertEqual(select.call_count,2)
+
+    def test_discovery_preserves_primary_failure_when_restore_also_fails(self):
+        engine = Mock(); engine.cfg = {}
+        ax = Mock(); ax.application.return_value = (None,None)
+        with patch.object(discovery,'Renewal',return_value=engine), \
+             patch.object(discovery,'list_organizations',return_value=[{'name':'A','selected':True}]), \
+             patch.object(discovery,'ensure_organization',side_effect=[None,KeeperError('org_switcher_not_found','restore')]), \
+             patch.object(discovery,'open_chat',side_effect=KeeperError('navigation_focus_lost','lost')):
+            with self.assertRaises(KeeperError) as caught:
+                discovery.discover({},ax)
+        self.assertEqual(caught.exception.code,'navigation_focus_lost')
+        evidence = caught.exception.discovery
+        self.assertFalse(evidence['ok'])
+        self.assertEqual(evidence['stage'],'finding_chat_entry')
+        self.assertEqual(evidence['enumerated_organizations'],['A'])
+        self.assertEqual(evidence['cleanup']['error'],'org_switcher_not_found')
+
+    def test_discovery_keeps_partial_coverage_on_later_org_failure(self):
+        engine = Mock(); engine.cfg = {}; engine.visible_links.return_value=[]
+        ax = Mock(); ax.application.return_value = (None,None)
+        with patch.object(discovery,'Renewal',return_value=engine), \
+             patch.object(discovery,'list_organizations',return_value=[{'name':'A','selected':True},{'name':'B','selected':False}]), \
+             patch.object(discovery,'ensure_organization',side_effect=[None,KeeperError('org_switcher_not_found','target'),None]), \
+             patch.object(discovery,'open_chat',side_effect=KeeperError('navigation_target_not_found','none')):
+            with self.assertRaises(KeeperError) as caught:
+                discovery.discover({},ax)
+        evidence=caught.exception.discovery
+        self.assertEqual(evidence['stage'],'selecting_organization')
+        self.assertEqual(evidence['current_candidate'],'B')
+        self.assertEqual(evidence['organizations'][0]['error'],'navigation_target_not_found')
+        self.assertEqual(len(evidence['organizations']),2)
+        self.assertTrue(evidence['cleanup']['ok'])

@@ -71,6 +71,8 @@ python3 -m venv .venv
 
 它逐个核对原生企业菜单和目标聊天，尝试读回已有官方入口，然后恢复原企业；不发送消息、不改授权。`chat_name_matched` 仅是名字候选，`link_identity_verified` 才表示发现双 Bot ID 匹配链接；即使 `ok=true`，`identity_review_required` 也不代表找到正确 Bot，更不代表续期通过。仅当唯一候选完成双身份核对，才填写 organization_selector_name 并启用 sidebar-5.0.13。未发现入口时按下一节核对机器人权限页、准备首次入口。必须保留每个组织的发现结果，不能只查当前企业就放弃。
 
+发现失败时，`discovery` 中保留 `enumerated_organizations`、已尝试组织、`stage` 和 `cleanup`；主错误不会被恢复企业的错误覆盖。枚举到了五个企业不等于已经逐一核对五个企业的 Bot。连续遇到相同失败且现场条件未变时，应检查具体步骤、原生页面或管理入口，不能反复重跑后用次数代替覆盖证据。
+
 ## 3. 企业与页面导航验收
 
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。
