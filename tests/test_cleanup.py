@@ -128,3 +128,24 @@ class CleanupTests(Fixture):
         with patch.object(ax, 'ax_perform', return_value=0):
             with self.assertRaises(KeeperError) as caught: self.engine(ax).close_window()
         self.assertEqual(caught.exception.code, 'window_close_failed')
+
+    def test_sheet_ancestry_protects_main_window_even_when_sidebar_is_hidden(self):
+        ax, sheet, button, _, _ = self.setup_sheet()
+        ax.window['AXChildren'] = [sheet, node('AXGroup')]
+        def close(n, action):
+            self.assertIs(n, button)
+            ax.window['AXChildren'].remove(sheet)
+            return 0
+        with patch.object(ax, 'ax_perform', side_effect=close):
+            result, _ = self.engine(ax).close_window()
+        self.assertEqual(result['closed_kind'], 'embedded-sheet')
+        self.assertIn(ax.window, ax.app['AXWindows'])
+
+    def test_missing_page_url_during_sheet_rebuild_does_not_count_as_closed(self):
+        ax, _, _, _, _ = self.setup_sheet()
+        def incomplete(n, action):
+            ax.page.pop('AXURL')
+            return 0
+        with patch.object(ax, 'ax_perform', side_effect=incomplete):
+            with self.assertRaises(KeeperError) as caught: self.engine(ax).close_window()
+        self.assertEqual(caught.exception.code, 'window_close_failed')

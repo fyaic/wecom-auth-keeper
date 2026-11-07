@@ -255,7 +255,8 @@ class Renewal:
             return {"ok": True, "mode": "close-window", "closed": False}, 0
         page = self.bound(window)
         from keeper_navigation import global_search, sidebar_rows
-        embedded = global_search(self, window) is not None or bool(sidebar_rows(self, window))
+        embedded = (global_search(self, window) is not None or bool(sidebar_rows(self, window))
+                    or any(self.ax.ax_get(n, 'AXRole') == 'AXSheet' for n in self.walk(window)))
         if embedded:
             from keeper_cleanup import embedded_close_button
             button = embedded_close_button(self, native, window, page)
@@ -273,9 +274,19 @@ class Renewal:
         if self.ax.ax_perform(button, "AXPress") != 0:
             raise KeeperError("window_close_failed", "Target window rejected its native close action")
         if embedded:
-            self.wait(self.select_window, lambda value: value is None, "window_close_failed", timeout=3)
-            if window not in (self.ax.ax_get(self.app, 'AXWindows') or []):
-                raise KeeperError('window_close_failed', 'Main window disappeared during sheet cleanup')
+            stable = 0
+            def dismissed():
+                nonlocal stable
+                remaining = self.ax.ax_get(self.app, 'AXWindows') or []
+                if window not in remaining:
+                    raise KeeperError('window_close_failed', 'Main window disappeared during sheet cleanup')
+                nodes = list(self.walk(window))
+                gone = (bool(self.ax.ax_get(window, 'AXChildren'))
+                        and not any(self.ax.ax_get(n, 'AXRole') == 'AXSheet' for n in nodes)
+                        and self.select_window() is None)
+                stable = stable + 1 if gone else 0
+                return stable >= 2
+            self.wait(dismissed, bool, "window_close_failed", timeout=3)
         else:
             self.wait(lambda: self.ax.ax_get(self.app, "AXWindows") or [],
                       lambda windows: window not in windows, "window_close_failed", timeout=3)
