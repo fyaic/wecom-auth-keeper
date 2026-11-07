@@ -71,6 +71,8 @@ def load_config(path, *, probes=False):
         parsed = urlsplit(cfg["bridge_url"])
         if parsed.scheme not in {"http", "https"} or not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment:
             raise KeeperError("invalid_config", "bridge_url must be an HTTP(S) service URL without credentials/query", 3)
+        if cfg.get("bridge_coordination") and parsed.hostname not in {"127.0.0.1", "::1", "localhost"}:
+            raise KeeperError("invalid_config", "Shared desktop coordination requires a local loopback Bridge", 3)
     for key, default in (("state_file", "~/.wecom-auth-renew/state.json"), ("log_file", "~/.wecom-auth-renew/renew.log")):
         raw = cfg.setdefault(key, default)
         if not isinstance(raw, str) or not raw.strip():

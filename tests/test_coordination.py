@@ -8,7 +8,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 
-from keeper_common import KeeperError, cli_environment, process_lock
+from keeper_common import KeeperError, cli_environment, load_config, process_lock
 from renew import monitor_guard
 from test_delivery import module
 
@@ -17,6 +17,19 @@ onboard = module('onboard')
 
 
 class CoordinationTests(unittest.TestCase):
+    def test_shared_coordination_rejects_remote_service_even_with_matching_claims(self):
+        cfg = {'bot_chat_name':'test','aibotid':'123','str_aibotid':'fixture',
+               'bridge_monitor':True,'bridge_coordination':'shared-lock-v1',
+               'bridge_url':'http://another-device.example:23392'}
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory)/'config.json'
+            path.write_text(json.dumps(cfg))
+            with self.assertRaises(KeeperError):
+                load_config(path)
+            cfg['bridge_url']='http://127.0.0.1:23392'
+            path.write_text(json.dumps(cfg))
+            self.assertEqual(load_config(path)['bridge_coordination'],'shared-lock-v1')
+
     def test_bridge_contract_requires_same_inode_and_never_changes_modes(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'desktop.lock'
