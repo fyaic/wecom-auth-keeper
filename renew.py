@@ -254,6 +254,12 @@ class Renewal:
         if window is None:
             return {"ok": True, "mode": "close-window", "closed": False}, 0
         self.bound(window)
+        from keeper_navigation import global_search, sidebar_rows
+        if global_search(self, window) is not None or sidebar_rows(self, window):
+            # Management pages in 5.0.13 embed the permission modal in the main
+            # WeCom window. Its traffic-light close button is NOT a modal close.
+            raise KeeperError('embedded_page_close_unavailable',
+                              'Permission page is embedded in the main window; native window close refused')
         pages = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea"]
         button = self.ax.ax_get(window, "AXCloseButton")
         if (len(pages) != 1 or button is None

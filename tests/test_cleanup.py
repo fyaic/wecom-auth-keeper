@@ -63,6 +63,16 @@ class CleanupTests(Fixture):
             with self.assertRaises(KeeperError): self.engine(ax).close_window()
         action.assert_not_called()
 
+    def test_embedded_management_modal_never_closes_main_wecom_window(self):
+        ax, _, _ = self.setup_window()
+        rows = [node('AXRow', _frame=(0, 100 + i * 56, 60, 56)) for i in range(9)]
+        ax.window['AXChildren'].insert(0, node('AXTable', children=rows, _frame=(0, 100, 60, 504)))
+        with patch.object(ax, 'ax_perform') as action:
+            with self.assertRaises(KeeperError) as caught:
+                self.engine(ax).close_window()
+        self.assertEqual(caught.exception.code, 'embedded_page_close_unavailable')
+        action.assert_not_called()
+
     def test_rejected_or_ineffective_close_is_failure(self):
         for status in (0, -1):
             ax, _, _ = self.setup_window()

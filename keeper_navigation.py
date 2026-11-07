@@ -45,6 +45,36 @@ def global_search(engine, window):
     return matches[0] if len(matches) == 1 else None
 
 
+def sidebar_rows(engine, window):
+    """Read the native sidebar table only, never rows from chats or web pages."""
+    outer = engine.ax.frame(window)
+    if not outer:
+        return []
+    stack, total, tables = [(window, 0)], 0, []
+    while stack:
+        current, depth = stack.pop()
+        total += 1
+        if total > 1500 or depth > 20:
+            raise KeeperError('tree_incomplete', 'Native sidebar tree exceeds limits')
+        role = engine.ax.ax_get(current, 'AXRole')
+        if role in {'AXWebArea', 'AXTextArea'}:
+            continue
+        children = engine.ax.ax_get(current, 'AXChildren') or []
+        if role == 'AXTable':
+            bounds = engine.ax.frame(current)
+            if bounds and 55 <= bounds[2] <= 65 and abs(bounds[0] - outer[0]) <= 2:
+                rows = [n for n in children if engine.ax.ax_get(n, 'AXRole') == 'AXRow'
+                        and engine.ax.frame(n) and 55 <= engine.ax.frame(n)[2] <= 65
+                        and engine.ax.frame(n)[3] >= 40]
+                if len(rows) >= 2:
+                    tables.append(sorted(rows, key=lambda n: engine.ax.frame(n)[1]))
+            continue  # Never descend into a conversation or unknown table.
+        stack.extend((n, depth + 1) for n in children)
+    if len(tables) > 1:
+        raise KeeperError('navigation_unavailable', 'Native sidebar is ambiguous')
+    return tables[0] if tables else []
+
+
 def heading_matches(engine, window, search):
     field = engine.ax.frame(search)
     if not field:
