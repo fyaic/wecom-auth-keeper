@@ -94,7 +94,7 @@ python3 -m venv .venv
 
 以上后台命令统一用 `delivery/gui.py --config ... --action check|close|maintain --evidence-dir <新的私有目录>`，每次只选一个 action。`maintain` 调用完整生产入口，不绕过监督器。`check` 后必须执行 `close`；`maintain` 自带 finally 关页。工具返回实际进程退出码与原始脚本结果，临时任务不会设置每小时调度。不要把任务登记成功、空日志、轮询 `launchctl print` 仍存在或模型文字结论当成完成。
 
-记录 `delivery/acceptance.example.json` 的副本到私有目录。只填实际证据。`entry_location` 记录实际入口位置；`entry_identity_verified` 记录私聊链接双身份核对；`entry_reopened_from_other_chat` 必须来自关页、切到其他会话后的后台重新导航结果，不能用当前打开的页面替代。多权限至少检查所有白名单项；某项成功不等于所有项成功。已有一个 Bot 的验收不能代表其他 Bot 或其他系统版本。
+记录 `delivery/acceptance.example.json` 的副本到私有目录。只填实际证据。schema_version=2 将身份拆为四项：cli_profile_verified 只代表选定了正确 CLI 配置，cli_url_identity_verified 只代表 CLI 与官方链接一致；desktop_organization_verified 和 desktop_bot_identity_verified 必须来自这台设备的桌面核验。前两项不能代替后两项。release_commit 从当前 MANIFEST.json 读取，不留空；scheduled_run_verified 必须有实际定时入口执行证据；runtime_human_or_agent_clicks 记录运行期间是否代点，人工/模型代点成功不能算无人值守续期。`entry_location` 记录实际入口位置；`entry_identity_verified` 记录私聊链接双身份核对；`entry_reopened_from_other_chat` 必须来自关页、切到其他会话后的后台重新导航结果，不能用当前打开的页面替代。多权限至少检查所有白名单项；某项成功不等于所有项成功。已有一个 Bot 的验收不能代表其他 Bot 或其他系统版本。
 
 ## 5. 安装、观察、升级、卸载
 

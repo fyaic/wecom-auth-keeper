@@ -1,10 +1,9 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "release_commit": null,
   "os": null,
   "client_version": null,
   "cli_version": null,
-  "identity_matched_live": false,
   "entry_location": "target_bot_private_chat_on_this_device",
   "entry_identity_verified": false,
   "entry_reopened_from_other_chat": "not_tested",
@@ -19,5 +18,11 @@
   "business_probe": "not_tested",
   "scheduler": "not_installed",
   "observed_at": null,
-  "blocking_code": null
+  "blocking_code": null,
+  "cli_profile_verified": false,
+  "cli_url_identity_verified": false,
+  "desktop_organization_verified": false,
+  "desktop_bot_identity_verified": false,
+  "scheduled_run_verified": false,
+  "runtime_human_or_agent_clicks": null
 }
