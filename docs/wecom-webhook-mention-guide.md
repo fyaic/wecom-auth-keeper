@@ -90,29 +90,26 @@ send_markdown_mention(
 | @ 显示但没人收到推送 | 客户端通知设置关了 | 让成员检查企微消息通知设置 |
 | errcode=0 但一切没发生 | 见上——API 不校验 @ 有效性 | 按验收流程真人验证 |
 
-## wecom-cli 路径的 @（2026-11-07 补充，CLI 双路径实测）
+## wecom-cli 路径的 @（2026-11-07 群内实测定稿：CLI 无法 @）
 
-CLI 有**两条**发送路径，@ 能力天差地别：
+CLI 有**两条**发送路径，**都不能 @ 人**：
 
-| 命令 | 消息类型 | @ 能力 | 前提 |
-| --- | --- | --- | --- |
-| `message send` | **仅 text**（schema 无 markdown/mentioned_list 字段） | ❌ **结构上无法 @**，写"@名字"只是普通文字 | 企业的用户消息接口（部分企业 853006 不可用） |
-| **`message aibot send`** | **markdown**（≤20480 字节）+ 图片/文件/语音/视频 | ✅ **markdown 内嵌 `<@userid>`**（与 webhook 同款蓝卡语法） | 机器人「发送消息」权限已授权（独立 7 天周期，可配 keeper 续期） |
+| 命令 | 消息类型 | @ 能力（实测） |
+| --- | --- | --- |
+| `message send` | 仅 text（schema 无 markdown/mention 字段） | ❌ 结构上无法 @ |
+| `message aibot send` | markdown（≤20480 字节）等 | ❌ **`<@userid>` 渲染为黑色普通文字**（群内实测 2026-11-07；官方 --doc 中 markdown content 亦无任何 @ 语法声明） |
 
-### aibot + markdown @ 的正确写法
+### 结论与出路
 
-```bash
-wecom-cli message aibot send --json '{
-  "chat_id": "wobO-XXXXXXXXXXXXXXXXXXX",
-  "msg_type": "markdown",
-  "markdown": {
-    "content": "**【任务提醒】** <@wobO-XXXXXXXXXXXXXXXXXXX> 这单今天 17:00 前需要确认"
-  }
-}'
-```
+**API 通道里，群机器人 webhook 的 markdown 是唯一能产生蓝色 @ 卡片的方式。**
+需要在通知里 @ 人的系统（如 workbuddy）应：
 
-要点：
-- `chat_id`：单聊传对方 userid；群聊传群会话 ID
-- `<@userid>` 直接写进 markdown content，客户端渲染成蓝色卡片
-- 权限过期时返回的不是 errcode 而是带授权链接的提示（`help_message` 字段），创建者点链接续期即可
-- 群成员资格同样是被 @ 的硬前提（与 webhook 一致）
+1. 在目标群添加群机器人，取 webhook key；
+2. 用本文第一节的 markdown + `<@userid>` 发送；
+3. CLI 路径仍可用于私聊文本、文件/图片等富消息（markdown 可用于排版，但不要指望 @）。
+
+CLI 与 webhook 可组合：常规通知走 webhook（带 @），需要发文件/图片时走 CLI。
+
+### 私聊场景说明
+
+`<@userid>` 在**单聊**里也是黑色普通文字——单聊本无 @ 语义（双方都收全部提醒），属预期行为，无需处理。
