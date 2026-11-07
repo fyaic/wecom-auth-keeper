@@ -90,3 +90,13 @@ Kimi 从原生组合属性中识别到含“可使用权限”的唯一 AXGroup�
 Kimi 后续单次状态感知原型从消息页自主进入详情及官方权限弹窗，两个已有 CLI profile 的双 Bot ID 均不匹配；没有修改授权。初次统计发生在内容加载前，0个按钮不能解释成无权限项。维护者随后使用 `1341af3` 干净包的实际 GUI launchd inspect-expanded，观察到12个授权按钮，组合属性来源为AXTitle/AXDescription，主窗口侧栏标记为true，AX原值恢复。
 
 关闭组件单独实测（2026-11-07约14:04）：该内嵌页有原生AXSheet，页内右上方28×28关闭按钮支持AXPress，但所有文本属性均为空。依据实际画面与AX节点共同核对，增加5.0.13中文布局的严格匹配（Sheet ancestry、唯一WebArea、标题及页内相对位置），不泛化到未知版本。实际GUI launchd纯Python调用新 `Renewal.close_window` 返回 `closed_kind=embedded-sheet`、exit0、main_window_preserved=true、AX原值恢复；运行期间无人/Agent代点关闭。此次仅在内存使用本轮诊断自行打开页面的身份用于清理，未写入CLI或生产配置，不能当作已找到业务Bot。维护者之后单独恢复消息视图；Bridge原提交、原PID保持，health=ok，原生组织读取read_failed=false，无临时任务残留。新增拒绝未知版本、标题变化、授权按钮冒充关闭按钮、几何变化、多按钮、多WebArea、错误祖先及无效点击的回归；全量158项通过，仓库检查通过。该结果证明关闭组件可用，不证明真实续期或定时调度已经通过。
+
+### 8dbd109 新包的独立 Kimi 复核
+
+进一步补充原生Sheet祖先保护（侧栏隐藏时也不能关主窗口），并连续确认Sheet消失，防止页面加载期间暂时缺URL被误判成关页成功。全量160项回归通过，无跳过；仓库检查通过。
+
+远端Kimi自行校验新ZIP、解压、manifest检查后，用已获系统授权的专用Python执行一次约100秒的GUI launchd只读原型；并非从空环境全新安装。它从消息页进入管理列表与详情，打开权限页，等到12个授权按钮加载后核对双ID，再调用该包的 `Renewal.close_window`：embedded-sheet关闭、主窗口保留均通过，运行期间维护者未代点。该页仍不匹配两个已有CLI profile，身份仅在内存用于清理自己打开的诊断页，未持久化或重新绑定CLI。
+
+五个原生菜单组织均尝试过，但不能称为完整核对：一个组织完成权限页读取和清理（后置组织核验有原型顺序缺陷），两个组织在切换并核验选中后没有识别到机器人页面状态，另两个组织菜单稳定等待超时。后两类与Bridge轮巡之间的本轮因果关系未证实。最终原组织、消息视图、AX原值恢复，临时job全部卸载，Bridge仍原提交与原PID，health=ok、原生组织读取read_failed=false。原型输出ok只代表诊断执行收尾，不能覆盖各组织失败字段，更不能代替renewal_verified=false。
+
+随后对同一新包执行仅GET的 `check_bridge_coordination`：实际返回 `desktop_coordination_required`；旧Bridge的协调能力接口实际HTTP404。没有运行monitor_guard的模式变更、没有授权动作、没有安装正式定时服务。**当前仍不满足“保持此旧Bridge运行且无人值守自动续期”的业务验收条件，不可发布为业务通过版。** 本机私聊入口、目标CLI Bot的桌面身份、真实有效期延长及定时触发仍未完成。
