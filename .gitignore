@@ -12,3 +12,8 @@ __pycache__/
 *.keepalive.lock
 .DS_Store
 *.maintenance.json
+# Real bot configs stay private (examples are committed).
+config-*.json
+!config.example.json
+!config.*.example.json
+inspect2.py
