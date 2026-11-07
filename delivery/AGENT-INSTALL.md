@@ -19,6 +19,14 @@
 
 CLI 授权人与企业微信当前组织显示的人名不同也不能直接认定是不同账号：先检查组织内身份和目标官方页面。若遍历已登录组织仍找不到匹配 Bot，输出具体已查范围和身份未核实结果；不得把另一 Bot 的页面填入 CLI 配置，不得自动重新初始化现有 CLI。首次初始化一个新 Bot 与续期旧 Bot 是不同步骤，需要业务人员确认目标和权限范围。
 
+先运行包内只读盘点工具；它仅调用官方版本、授权状态和身份命令，不扫描凭据、不初始化 Bot。`--profile` 只填本机已知业务配置目录，可重复；默认 profile 始终单独核对。报告含本机身份，仅保存在包外私有目录，不能转发：
+
+```bash
+python3 delivery/profiles.py --profile /absolute/known/cli-profile --output /absolute/private/profiles.json
+```
+
+只使用默认 profile 时省略 `--profile`。工具的 `ok=true` 只说明盘点完成，`target_selected=false` 和 `desktop_identity_verified=false` 必须由现场核对补齐。多个组织 / 多个 Bot 是正常情况：从业务使用的 CLI profile 出发，核对该 Bot 的组织和页面；默认 profile 不拥有优先权。如果另一个组织的 Bot 才是部署对象，使用它的既有独立 profile；尚未绑定则明确作为首次安装流程，不把它当作改名或要求覆盖默认 Bot。
+
 多 Bot 的 CLI 配置必须明确选择，不能只核对默认目录后声称覆盖了整台设备。CLI 1.3.0 实测支持 `WECOM_CLI_CONFIG_DIR=/absolute/private/profile`；先用 `auth show --status` 只读验证所选目录及默认配置没有混用，再在同一环境下执行身份查询和业务复查。此项在其他 CLI 版本上需要重新验证，不猜 profile 参数、不改 HOME、不复制 Secret。用户同意新增测试 Bot 时使用新建的独立目录；官方扫码绑定和首次业务权限确认仍是必要的一次性步骤，禁止覆盖旧配置或把它们算成自动续期已经完成。
 
 从用户指定 Bot 的官方权限页或本地已有 850003 帮助链接取得 authorization_url。只在指定 profile/业务日志内查找，不扫描整台电脑的凭据。不回显完整链接、Bot ID、聊天内容或认证数据。链接必须为官方 HTTPS 路径且同时包含两个 Bot 标识；其中 str_aibotid 必须和现场 CLI Bot ID 相同。机器人名字和企业文字仅作导航线索。
@@ -29,11 +37,14 @@ CLI 授权人与企业微信当前组织显示的人名不同也不能直接认�
 {
   "bot_chat_name": "<本机目标机器人完整会话名>",
   "organization_name": "<本机目标企业>",
+  "cli_config_dir": "/absolute/private/selected-cli-profile",
   "authorization_url": "<本机官方权限链接>",
   "cli_bot_id": "<刚刚从指定CLI profile核验的Bot ID>",
   "target_rows": ["搜索与获取文档内容", "新建与编辑文档"]
 }
 ```
+
+`cli_config_dir` 为可选字段：默认 profile 应省略，独立 profile 必须填写绝对路径；安装后所有身份/业务复查必须使用该值。不要依赖 Agent 进程继承的环境变量。
 
 权限目录在 `keeper_capabilities.py`。只选择用户业务需要的项；模板不是允许给所有权限授权。页面不能总是区分未授权与已过期，用户确认白名单也代表允许授予这些能力。无需索取 Secret。
 
@@ -63,7 +74,7 @@ python3 -m venv .venv
 ## 3. 企业与页面导航验收
 
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。
-- 若本机已有 WeCom Bridge 占用 UI，可在核对其本机服务地址后配置 `bridge_monitor=true` 和 `bridge_url`；定时维护会在导航前切到 observe，关页后恢复原模式，子进程超时也由父进程负责恢复。没有 Bridge 的机器保持默认 false，不为续期额外安装 Bridge。observe 不是跨服务通用桌面锁。已确认启用组织轮转的 Bridge 会在 observe 模式继续点击桌面，因此当前候选会在任何续期导航前检查轮转状态；已启用/运行返回 desktop_coordination_required，接口不可用或状态不明返回 desktop_coordination_unknown。不要把 bridge_monitor 改成 false、暂停整个服务或修改别人的生产代码来凑出成功；需先实现并验收双方认可的桌面互斥。轮转关闭也不代表所有桌面操作者均已停用，必须在其他服务恢复正常运行时验收；需要人工暂停其他服务才能通过的设备不能标为无人值守通过。`--worker` 是内部子进程入口，不得直接部署为任务，生产入口必须使用不带该选项的 `maintain.py`。
+- 没有 Bridge 的设备保持 `bridge_monitor=false`，不为续期安装 Bridge。存在 Bridge 时，先核对同一登录用户的服务地址。支持共同桌面锁的 Bridge 配置为 `bridge_monitor=true`、`bridge_url` 和 `bridge_coordination="shared-lock-v1"`。该协议需要 Bridge 同时升级（见 `delivery/BRIDGE-COORDINATION.md`），不是只改 Keeper 的配置即可工作。Keeper 验证协议、用户、锁文件 inode 和组织重新核验能力后才开始；Bridge 轮巡、监控和 UI 请求在此期间自动让出桌面，关页后恢复。已有私聊入口必须先准备好；该模式不支持调用 Bridge 发入口链接。旧 Bridge 不支持时明确停止，禁止关闭检测、SIGSTOP 或手动暂停服务冒充无人值守通过。旧 observe 兼容路径仍保留，但不能证明独占桌面；启用组织轮巡时明确拒绝。`--worker` 只供监督器内部使用，正式任务使用不带该参数的 `maintain.py`。
 - 默认将续期入口保存在**当前部署设备上、当前企业账号与目标 Bot 的私聊消息**中。先核对当前 CLI profile、官方授权链接的双 Bot ID 和目标机器人；不要复制其他设备/机器人的链接，不用群聊、他人的私聊或文件传输助手作为默认入口。
 - 首次没有链接时，说明需要一次“入口准备”。用户授权后只向已核对的目标 Bot 私聊发送一次官方链接；用户也可自行发送。发送后必须在这台设备的私聊历史中读回、匹配双 Bot ID，再关闭权限页，从其他会话重新运行完整后台导航。其他设备上能看到消息、或当前权限页已打开，都不能代替此设备的后台验收。日常续期只查找已有入口，不反复发消息。
 - Bot 显示名可能被改名，CLI 本地缓存名称不能代替最新现场身份。名称不符时先核对官方页面/链接的双 Bot ID，再更新本机导航名称；不能凭“看起来像测试 Bot”就更换目标。

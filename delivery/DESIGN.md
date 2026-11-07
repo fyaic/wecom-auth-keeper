@@ -86,3 +86,6 @@
 构建只从提交中的固定文件列表取内容，拒绝核心文件未提交修改。执行 `python3 delivery/build_bundle.py --output /absolute/output/keeper-agent-preview.zip`。验证解压、manifest、无私有文件、无发包人路径、所有运行入口导入完整，然后交付 ZIP、外部校验文件及 START-HERE.md。不能直接压缩本地项目目录，也不包含 .git、.venv、私有输入、日志、状态或专属部署文档。
 
 macOS 正式版本还需：不同 Mac 从空环境安装、同真实后台链路实际续期、组织身份核验及组织切换回归、既有 UI 服务共存和异常恢复测试。当前远端独立 Kimi 演练失败，不能用旧引擎在维护者本机的成功替代。Windows 后端与实体环境验证是单独的支持发布门槛，不阻止将来只发布 macOS 版；当前不支持 Windows。签名/notarization/依赖镜像可另行建设。
+
+
+2026-11-07 实现进展：新增显式 CLI profile 盘点与配置保存；共同桌面锁、继承描述符和组织交接重新核验已在 Keeper 与隔离 Bridge 分支实现，见 BRIDGE-COORDINATION.md。尚待远端生产集成和独立 Kimi 重新验收，不代表本段发布门槛已达成。

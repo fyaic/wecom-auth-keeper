@@ -39,8 +39,11 @@ def configure(value, destination, system=None):
     if not isinstance(value, dict):
         raise ValueError('invalid_input')
     required = {'bot_chat_name', 'authorization_url', 'cli_bot_id', 'target_rows', 'organization_name'}
-    if set(value) != required:
+    if not required <= set(value) or set(value) - required - {'cli_config_dir'}:
         raise ValueError('invalid_input_fields')
+    profile = value.get('cli_config_dir')
+    if profile is not None and (not isinstance(profile, str) or not profile.strip() or not Path(profile).is_absolute()):
+        raise ValueError('invalid_cli_profile')
     for key in required - {'target_rows'}:
         if not isinstance(value[key], str) or not value[key].strip() or value[key].startswith('<') or '\n' in value[key]:
             raise ValueError('missing_identity_or_organization')
@@ -70,6 +73,10 @@ def configure(value, destination, system=None):
            'renew_timeout': 600, 'lock_wait': 10,
            'maintenance': {'within_hours': 24, 'interval_seconds': 3600,
                            'min_renew_interval_seconds': 3600, 'retry_seconds': 300, 'close_window': True}}
+    if profile is not None:
+        cfg['cli_config_dir'] = profile
+    # Preserve declared business intent without enabling unverified navigation.
+    cfg['expected_organization'] = value['organization_name']
     # The version-gated organization adapter is opt-in after menu/device validation.
     # Keep its automatic switch off until this exact device has validated that path.
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -96,7 +103,7 @@ def main():
             'unsupported_automation_backend', 'invalid_input', 'invalid_input_fields',
             'missing_identity_or_organization', 'invalid_authorization_url', 'cli_bot_identity_mismatch',
             'invalid_permission_allowlist', 'private_config_must_be_outside_release',
-            'input_and_output_required_together'} else 'input_or_output_unavailable'
+            'input_and_output_required_together', 'invalid_cli_profile'} else 'input_or_output_unavailable'
         report, code = {'ok': False, 'error': known}, 3
     print(json.dumps(report, ensure_ascii=False))
     return code

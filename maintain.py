@@ -54,7 +54,8 @@ def write_launchagent(cfg, output):
 def supervise(cfg, *, run=subprocess.run):
     # The parent keeps ownership through worker termination and cleanup. A killed
     # worker cannot run its finally block, so it cannot own monitor restoration.
-    with process_lock(gui_lock_path(), cfg["lock_wait"]):
+    with process_lock(gui_lock_path(), cfg["lock_wait"]) as lock_fd:
+        cfg = {**cfg, "_desktop_lock_fd": lock_fd}
         try:
             with monitor_guard(cfg):
                 return supervised_worker(cfg, run=run)
@@ -69,8 +70,9 @@ def supervised_worker(cfg, *, run=subprocess.run):
     """Bound the worker lifetime, including native AX calls; timeout never claims success."""
     python = executable(cfg.get("venv_python"), sys.executable)
     args = [python, str(Path(__file__).resolve()), "--config", cfg["_config_path"], "--worker"]
+    inheritance = {"pass_fds": (cfg["_desktop_lock_fd"],)} if "_desktop_lock_fd" in cfg else {}
     try:
-        child = run(args, capture_output=True, text=True, timeout=cfg["renew_timeout"])
+        child = run(args, capture_output=True, text=True, timeout=cfg["renew_timeout"], **inheritance)
         value = json.loads(child.stdout)
         if not isinstance(value, dict) or not isinstance(value.get("ok"), bool):
             raise ValueError()
@@ -87,7 +89,7 @@ def supervised_worker(cfg, *, run=subprocess.run):
                 # This child shares the parent's protected cycle; renew.py's
                 # public --close-window would try to acquire the same lock again.
                 child = run([python, str(Path(__file__).resolve()), "--config", cfg["_config_path"],
-                             "--cleanup-worker"], capture_output=True, text=True, timeout=30)
+                             "--cleanup-worker"], capture_output=True, text=True, timeout=30, **inheritance)
                 closed = json.loads(child.stdout)
                 result["cleanup"] = {"ok": child.returncode == 0 and closed.get("ok") is True}
             except Exception:

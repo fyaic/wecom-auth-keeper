@@ -8,6 +8,7 @@ from pathlib import Path
 import shutil
 import tempfile
 import time
+import uuid
 from urllib.parse import urlsplit
 
 DEFAULT_ROWS = ["新建与编辑文档", "搜索与获取文档内容"]
@@ -38,6 +39,10 @@ def load_config(path, *, probes=False):
     for key in ("bridge_send_link", "bridge_monitor", "chat_history_navigation"):
         if key in cfg and not isinstance(cfg[key], bool):
             raise KeeperError("invalid_config", f"{key} must be boolean", 3)
+    if "bridge_coordination" in cfg:
+        if (cfg["bridge_coordination"] != "shared-lock-v1" or not cfg.get("bridge_monitor")
+                or cfg.get("bridge_send_link")):
+            raise KeeperError("invalid_config", "shared-lock-v1 requires bridge_monitor and a prepared private-chat link", 3)
     if 'organization_navigation' in cfg:
         if cfg['organization_navigation'] != 'sidebar-5.0.13':
             raise KeeperError('invalid_config', 'Unknown organization adapter', 3)
@@ -51,6 +56,10 @@ def load_config(path, *, probes=False):
     for key in ("bridge_url", "notify_to", "wecom_cli", "venv_python"):
         if key in cfg and not isinstance(cfg[key], str):
             raise KeeperError("invalid_config", f"{key} must be a string", 3)
+    if "cli_config_dir" in cfg:
+        value = cfg["cli_config_dir"]
+        if not isinstance(value, str) or not Path(value).is_absolute() or not value.strip():
+            raise KeeperError("invalid_config", "cli_config_dir must be an absolute private profile path", 3)
     if (cfg.get("bridge_send_link") or cfg.get("bridge_monitor")) and not cfg.get("bridge_url"):
         raise KeeperError("invalid_config", "bridge_url is required for enabled bridge features", 3)
     for key in ("wecom_cli", "venv_python"):
@@ -81,6 +90,15 @@ def executable(value, default):
     if not result:
         raise KeeperError("missing_executable", f"Executable not available: {default}", 3)
     return result
+
+
+def cli_environment(cfg):
+    """Keep selected CLI identity stable across terminal, Agent and launchd."""
+    env = os.environ.copy()
+    env.pop("WECOM_CLI_CONFIG_DIR", None)
+    if cfg.get("cli_config_dir"):
+        env["WECOM_CLI_CONFIG_DIR"] = cfg["cli_config_dir"]
+    return env
 
 
 def atomic_json(path, data):
@@ -117,10 +135,15 @@ def process_lock(path, wait=10):
                 if time.monotonic() >= deadline:
                     raise KeeperError("lock_busy", "Another operation holds the lock", 4)
                 time.sleep(min(0.1, max(0, deadline - time.monotonic())))
-        yield
+        # Handoff generation lets cooperating services invalidate UI/org caches
+        # after an external owner, even if that owner crashes before cleanup.
+        marker = uuid.uuid4().hex.encode('ascii')
+        os.pwrite(fd, marker, 0)
+        os.ftruncate(fd, len(marker))
+        yield fd
     finally:
-        if acquired:
-            fcntl.flock(fd, fcntl.LOCK_UN)
+        # Closing preserves a lease inherited by a still-running supervised
+        # worker if its parent exits. Explicit LOCK_UN would release it for both.
         os.close(fd)
 
 

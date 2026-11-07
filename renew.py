@@ -64,6 +64,22 @@ def bridge_request(cfg, method, path, body=None):
 
 
 def check_bridge_coordination(cfg):
+    if cfg.get("bridge_coordination") == "shared-lock-v1":
+        try:
+            response = bridge_request(cfg, "GET", "/wecom/desktop/coordination")
+            info = gui_lock_path().stat()
+            import os
+            if (response.get("protocol") != "wecom-desktop-flock-v1"
+                    or response.get("scope") != "bridge-ui"
+                    or response.get("handoff_refresh") is not True
+                    or response.get("lock_path") != str(gui_lock_path())
+                    or response.get("device") != info.st_dev
+                    or response.get("inode") != info.st_ino
+                    or response.get("uid") != os.getuid()):
+                raise ValueError("coordination_contract_mismatch")
+        except Exception as exc:
+            raise KeeperError("desktop_coordination_unknown", "Bridge does not share the verified desktop lock") from exc
+        return
     # Observe disables message handling, not the independent organization
     # rotator. A running rotator can dismiss our menus or change enterprises.
     # Reject this known conflict before any GUI work or monitor mutation.
@@ -84,6 +100,11 @@ def monitor_guard(cfg):
         yield
         return
     check_bridge_coordination(cfg)
+    if cfg.get("bridge_coordination") == "shared-lock-v1":
+        # The public caller holds EX through cleanup. Bridge's SH activities
+        # cannot start; don't alter modes or call its blocked mutation routes.
+        yield
+        return
     original = bridge_request(cfg, "GET", "/wecom/monitor/mode").get("mode")
     if original not in {"active", "observe"}:
         raise KeeperError("monitor_unknown", "Cannot establish the original bridge monitor mode")
@@ -425,6 +446,8 @@ def main(argv=None):
             with process_lock(gui_lock_path(), cfg["lock_wait"]):
                 try:
                     engine = Renewal(cfg, ax)
+                    if args.close_window and cfg.get("bridge_monitor", cfg.get("bridge_send_link", False)):
+                        check_bridge_coordination(cfg)
                     result, code = (engine.close_window() if args.close_window else
                                     engine.run(mode, args.existing_window, args.within_hours))
                 except Exception as exc:

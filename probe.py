@@ -8,12 +8,12 @@ import subprocess
 import sys
 import time
 
-from keeper_common import emit_error, executable, load_config
+from keeper_common import cli_environment, emit_error, executable, load_config
 
 
-def call_cli(binary, args, timeout):
+def call_cli(binary, args, timeout, *, env=None):
     try:
-        process = subprocess.run([binary, *args], capture_output=True, text=True, timeout=timeout)
+        process = subprocess.run([binary, *args], capture_output=True, text=True, timeout=timeout, env=env)
     except subprocess.TimeoutExpired:
         return {"ok": False, "errcode": None, "error": "timeout"}
     except OSError:
@@ -33,11 +33,12 @@ def call_cli(binary, args, timeout):
 
 def run_probes(cfg):
     binary = executable(cfg.get("wecom_cli"), "wecom-cli")
-    read = call_cli(binary, ["sheet", "get", "--docid", cfg["read_docid"]], cfg["probe_timeout"])
+    env = cli_environment(cfg)
+    read = call_cli(binary, ["sheet", "get", "--docid", cfg["read_docid"]], cfg["probe_timeout"], env=env)
     grid = {"start_row": 0, "start_column": 0, "rows": [{"values": [{
         "data_type": "TEXT", "cell_value": {"text": f"keepalive-{int(time.time())}"}}]}]}
     write = call_cli(binary, ["sheet", "contents", "update", "--docid", cfg["write_docid"],
-                             "--sheet-id", cfg["write_sheet"], "--grid-data", json.dumps(grid)], cfg["probe_timeout"])
+                             "--sheet-id", cfg["write_sheet"], "--grid-data", json.dumps(grid)], cfg["probe_timeout"], env=env)
     return {"ok": read["ok"] and write["ok"], "checked_at": datetime.now().isoformat(), "read": read, "write": write}
 
 
