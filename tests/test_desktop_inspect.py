@@ -60,3 +60,26 @@ class DesktopInspectionTests(Fixture):
                     valid.replace('https://', 'https://user@'), valid + '&aibotid=456', valid.replace('aibotid=123', 'aibotid=')):
             self.assertFalse(inspection.official_page(url))
         self.assertTrue(inspection.official_page(valid))
+
+    def test_composite_native_card_reports_only_allowlisted_semantics_and_sources(self):
+        ax = self.adapter()
+        ax.window['AXChildren'].append(node('AXGroup', 'private bot name',
+            AXDescription='可使用权限\nprivate permission description\n授权消息',
+            AXHelp='可使用权限'))
+        result = inspection.inspect_desktop(self.cfg, ax)
+        controls = result['windows'][0]['native_controls']
+        card = next(c for c in controls if c['label'] == '可使用权限')
+        self.assertEqual(card['attributes'], ['AXDescription', 'AXHelp'])
+        self.assertEqual(card['match'], 'exact')
+        serialized = json.dumps(controls, ensure_ascii=False)
+        for private in ('private bot name', 'private permission description', '授权消息'):
+            self.assertNotIn(private, serialized)
+        self.assertNotIn('消息', [c['label'] for c in controls])
+
+    def test_contained_heading_is_not_reported_as_an_exact_click_target(self):
+        ax = self.adapter()
+        card = node('AXGroup', '可使用权限\nprivate composite description')
+        labels = inspection.native_labels(ax, card)
+        self.assertEqual(labels, [{'label': '可使用权限', 'match': 'contained', 'attributes': ['AXTitle']}])
+        detail = inspection.native_labels(ax, node('AXImage', '机器人详情'))
+        self.assertEqual([v['label'] for v in detail], ['机器人详情'])

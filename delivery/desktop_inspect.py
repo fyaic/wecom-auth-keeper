@@ -14,13 +14,36 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from keeper_common import emit_error, load_config
 from keeper_accessibility import exposed_tree
-from keeper_navigation import label
+from keeper_navigation import sidebar_rows
 from keeper_organization import menu_rows
 from renew import Renewal, target_url
 
 NATIVE_LABELS = {'消息', '机器人', '智能机器人', '管理机器人', '我的机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
                  '查找聊天记录', '关闭聊天记录'}
 PERMISSION_LABELS = {'授权', '已授权', '取消授权', '确认', '确定', '同意', '重新授权'}
+
+
+def native_labels(ax, node):
+    """Return fixed diagnostic labels, never a raw composite card description.
+
+    Native 5.0.13 cards can combine headings and descriptions in one AX value.
+    A contained label is only an observation; it does not identify a click target.
+    Short labels require equality to avoid treating e.g. 机器人详情 as 详情.
+    """
+    matches = {}
+    for attribute in ('AXTitle', 'AXValue', 'AXDescription', 'AXHelp'):
+        value = ax.ax_get(node, attribute)
+        if not isinstance(value, str):
+            continue
+        value = value.strip()
+        for name in NATIVE_LABELS:
+            exact = value == name
+            if exact or (len(name) >= 4 and name in value):
+                entry = matches.setdefault(name, {'label': name, 'match': 'contained', 'attributes': []})
+                entry['attributes'].append(attribute)
+                if exact:
+                    entry['match'] = 'exact'
+    return [matches[name] for name in sorted(matches)]
 
 
 def official_page(value):
@@ -67,12 +90,12 @@ def snapshot(engine, native, cfg, ax):
               'visible_organization_menu': [{'name': r[0], 'selected': r[1]} for r in menu_rows(engine)]}
     for number, window in enumerate(ax.ax_get(engine.app, 'AXWindows') or []):
         entry = {'window_index': number, 'bounds': ax.frame(window),
+                 'main_window_sidebar_present': bool(sidebar_rows(engine, window)),
                  'native_controls': [], 'official_permission_pages': []}
         result['windows'].append(entry)
         for node in native_controls(engine, window):
-            text = label(engine, node)
-            if text in NATIVE_LABELS:
-                entry['native_controls'].append({'label': text, 'role': ax.ax_get(node, 'AXRole'),
+            for match in native_labels(ax, node):
+                entry['native_controls'].append({**match, 'role': ax.ax_get(node, 'AXRole'),
                                                 'bounds': ax.frame(node), 'actions': ax.action_names(node)})
         for node in engine.walk(window):
             if ax.ax_get(node, 'AXRole') != 'AXWebArea':
