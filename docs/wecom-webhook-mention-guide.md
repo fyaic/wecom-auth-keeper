@@ -89,3 +89,30 @@ send_markdown_mention(
 | 正文出现原始 `<@wobO-...>` 字样 | markdown 语法没生效或版本过旧 | 确认 msgtype=markdown；升级客户端 |
 | @ 显示但没人收到推送 | 客户端通知设置关了 | 让成员检查企微消息通知设置 |
 | errcode=0 但一切没发生 | 见上——API 不校验 @ 有效性 | 按验收流程真人验证 |
+
+## wecom-cli 路径的 @（2026-11-07 补充，CLI 双路径实测）
+
+CLI 有**两条**发送路径，@ 能力天差地别：
+
+| 命令 | 消息类型 | @ 能力 | 前提 |
+| --- | --- | --- | --- |
+| `message send` | **仅 text**（schema 无 markdown/mentioned_list 字段） | ❌ **结构上无法 @**，写"@名字"只是普通文字 | 企业的用户消息接口（部分企业 853006 不可用） |
+| **`message aibot send`** | **markdown**（≤20480 字节）+ 图片/文件/语音/视频 | ✅ **markdown 内嵌 `<@userid>`**（与 webhook 同款蓝卡语法） | 机器人「发送消息」权限已授权（独立 7 天周期，可配 keeper 续期） |
+
+### aibot + markdown @ 的正确写法
+
+```bash
+wecom-cli message aibot send --json '{
+  "chat_id": "wobO-XXXXXXXXXXXXXXXXXXX",
+  "msg_type": "markdown",
+  "markdown": {
+    "content": "**【任务提醒】** <@wobO-XXXXXXXXXXXXXXXXXXX> 这单今天 17:00 前需要确认"
+  }
+}'
+```
+
+要点：
+- `chat_id`：单聊传对方 userid；群聊传群会话 ID
+- `<@userid>` 直接写进 markdown content，客户端渲染成蓝色卡片
+- 权限过期时返回的不是 errcode 而是带授权链接的提示（`help_message` 字段），创建者点链接续期即可
+- 群成员资格同样是被 @ 的硬前提（与 webhook 一致）

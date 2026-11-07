@@ -6,7 +6,8 @@
   "target_rows": [
     "搜索与获取文档内容",
     "新建与编辑文档",
-    "搜索企业成员"
+    "搜索企业成员",
+    "发送消息"
   ],
   "chat_history_navigation": true,
   "bridge_send_link": false,
