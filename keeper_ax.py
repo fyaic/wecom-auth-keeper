@@ -5,7 +5,8 @@ from keeper_common import KeeperError
 from AppKit import NSWorkspace, NSPasteboard, NSPasteboardItem, NSPasteboardTypeString
 from ApplicationServices import (
     AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
-    AXUIElementPerformAction, AXUIElementCopyActionNames, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
+    AXUIElementPerformAction, AXUIElementCopyActionNames, AXUIElementSetAttributeValue,
+    AXUIElementIsAttributeSettable, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
 )
 from Quartz import (
     CGEventCreateMouseEvent, CGEventPost, CGPoint, kCGEventLeftMouseDown,
@@ -94,6 +95,15 @@ def ax_get(element, attribute):
 
 def ax_perform(element, action):
     return AXUIElementPerformAction(element, action)
+
+
+def ax_set(element, attribute, value):
+    return AXUIElementSetAttributeValue(element, attribute, value)
+
+
+def ax_settable(element, attribute):
+    error, value = AXUIElementIsAttributeSettable(element, attribute, None)
+    return error == 0 and bool(value)
 
 
 def action_names(element):

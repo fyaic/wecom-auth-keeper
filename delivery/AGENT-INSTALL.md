@@ -79,6 +79,8 @@ python3 -m venv .venv
 .venv/bin/python delivery/gui.py --config /absolute/private/config.json --action inspect --evidence-dir /absolute/private/inspection-1
 ```
 
+5.0.13 的机器人管理页可能肉眼可见，但普通 AX 树缺少页面内容。此时不要把空树判断成“没有机器人”，也不要反复尝试坐标。使用 `--action inspect-expanded`，它临时请求企业微信公开的 `AXEnhancedUserInterface` 原生辅助功能树，读回实际状态后再检查，退出时恢复原值；这不修改系统辅助功能授权、不激活窗口、不点击、不调用 Bridge。远端实测 setter 可能返回非零而属性已生效，因此以实际读回及 `native_tree_exposure.restored` 为准。若返回 `ax_exposure_unavailable`、`ax_exposure_failed` 或 `ax_exposure_restore_failed`，保留结果，不能假定已经展开/恢复。该工具仅诊断页面可见性，尚不能代替已验证的机器人管理页导航流程，也不能突破旧 Bridge 的桌面协调限制。
+
 ## 3. 企业与页面导航验收
 
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。

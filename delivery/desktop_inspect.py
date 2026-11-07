@@ -5,6 +5,7 @@ This is a diagnostic snapshot, safe to request without claiming desktop ownershi
 No raw URLs, Bot IDs, conversation text, clipboard or credential files are emitted.
 """
 import argparse
+from contextlib import nullcontext
 import json
 from pathlib import Path
 import sys
@@ -12,11 +13,12 @@ from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from keeper_common import emit_error, load_config
-from keeper_navigation import chrome, label
+from keeper_accessibility import exposed_tree
+from keeper_navigation import label
 from keeper_organization import menu_rows
 from renew import Renewal, target_url
 
-NATIVE_LABELS = {'消息', '机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
+NATIVE_LABELS = {'消息', '机器人', '智能机器人', '管理机器人', '我的机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
                  '查找聊天记录', '关闭聊天记录'}
 PERMISSION_LABELS = {'授权', '已授权', '取消授权', '确认', '确定', '同意', '重新授权'}
 
@@ -33,9 +35,32 @@ def official_page(value):
         return False
 
 
-def inspect_desktop(cfg, ax):
+def inspect_desktop(cfg, ax, *, expand=False):
     engine = Renewal(cfg, ax)
     native, engine.app = ax.application()
+    with exposed_tree(ax, engine.app) if expand else nullcontext(None) as exposure:
+        result = snapshot(engine, native, cfg, ax)
+        if exposure is not None:
+            result['native_tree_exposure'] = exposure
+    return result
+
+
+def native_controls(engine, root):
+    """Inspect native robot-page scroll content while excluding web/chat editors."""
+    stack, total = [(root, 0)], 0
+    while stack:
+        node, depth = stack.pop()
+        total += 1
+        if total > 5000 or depth > 40:
+            from keeper_common import KeeperError
+            raise KeeperError('tree_incomplete', 'Native inspection tree exceeds limits')
+        if engine.ax.ax_get(node, 'AXRole') in {'AXWebArea', 'AXTable', 'AXTextArea'}:
+            continue
+        yield node
+        stack.extend((c, depth + 1) for c in engine.ax.ax_get(node, 'AXChildren') or [])
+
+
+def snapshot(engine, native, cfg, ax):
     result = {'ok': True, 'mode': 'desktop-inspection', 'renewal_verified': False,
               'navigation_performed': False, 'authorization_changed': False,
               'client_version': ax.client_version(native), 'windows': [],
@@ -44,7 +69,7 @@ def inspect_desktop(cfg, ax):
         entry = {'window_index': number, 'bounds': ax.frame(window),
                  'native_controls': [], 'official_permission_pages': []}
         result['windows'].append(entry)
-        for node in chrome(engine, window):
+        for node in native_controls(engine, window):
             text = label(engine, node)
             if text in NATIVE_LABELS:
                 entry['native_controls'].append({'label': text, 'role': ax.ax_get(node, 'AXRole'),
@@ -75,14 +100,18 @@ def inspect_desktop(cfg, ax):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', required=True)
+    p.add_argument('--expose-native-tree', action='store_true',
+                   help='Temporarily expand the advertised native AX tree, then restore its original flag')
     args = p.parse_args()
     try:
         cfg = load_config(args.config)
         import keeper_ax as ax
-        result = inspect_desktop(cfg, ax)
+        result = inspect_desktop(cfg, ax, expand=args.expose_native_tree)
         code = 0
     except Exception as exc:
         result, code = emit_error(exc)
+        if getattr(exc, 'ax_exposure_cleanup_failed', False):
+            result['native_tree_restore_failed'] = True
     print(json.dumps(result, ensure_ascii=False))
     return code
 
