@@ -73,6 +73,12 @@ python3 -m venv .venv
 
 发现失败时，`discovery` 中保留 `enumerated_organizations`、已尝试组织、`stage` 和 `cleanup`；主错误不会被恢复企业的错误覆盖。枚举到了五个企业不等于已经逐一核对五个企业的 Bot。连续遇到相同失败且现场条件未变时，应检查具体步骤、原生页面或管理入口，不能反复重跑后用次数代替覆盖证据。
 
+无需临时编写 launchd 探针来观察当前页面。`gui.py --action inspect` 使用同一执行 Python，只读取当前原生控件、当前已展开的企业菜单，以及官方权限页与配置 Bot 是否匹配、授权控件支持的 AX actions。它不点击、不切企业、不打开权限页，不输出原始 URL/ID/聊天内容，允许在另一个 UI 服务运行时用于诊断；`ok=true` 只代表快照读取成功，不代表组织身份已验证、获得桌面独占或续期通过。示例：
+
+```bash
+.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action inspect --evidence-dir /absolute/private/inspection-1
+```
+
 ## 3. 企业与页面导航验收
 
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。

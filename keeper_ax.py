@@ -96,6 +96,11 @@ def ax_perform(element, action):
     return AXUIElementPerformAction(element, action)
 
 
+def action_names(element):
+    error, actions = AXUIElementCopyActionNames(element, None)
+    return list(actions or []) if error == 0 else []
+
+
 def frame(element):
     position, size = ax_get(element, "AXPosition"), ax_get(element, "AXSize")
     if position is None or size is None:
