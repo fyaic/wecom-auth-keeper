@@ -76,12 +76,19 @@ class EnsureTests(unittest.TestCase):
         engine = FakeEngine({}, [win_with(["任何内容"])])
         self.assertEqual(ensure_organization(engine, None), {"switched": False})
 
-    def test_switcher_missing_raises(self):
-        # 目标组织不可见，且窗口里没有头像按钮 → 明确报错而不是乱点
-        engine = FakeEngine(CFG, [win_with(["弗忧的内容"])])
-        with self.assertRaises(KeeperError) as ctx:
-            ensure_organization(engine, None)
-        self.assertIn("Avatar/org button not found", str(ctx.exception))
+    def test_switcher_missing_raises_after_retry(self):
+        # 目标组织不可见、无头像按钮：两次尝试 + 坐标兜底后面板仍无目标组织 → 报诊断详细的错
+        import keeper_organization
+        clicks = []
+        keeper_organization._post_click = lambda cx, cy: clicks.append((cx, cy))
+        try:
+            engine = FakeEngine(CFG, [win_with(["弗忧的内容"])])
+            with self.assertRaises(KeeperError) as ctx:
+                ensure_organization(engine, None)
+            self.assertIn("row not found in switcher panel", str(ctx.exception))
+            self.assertTrue(clicks, "坐标兜底应被触发")
+        finally:
+            del keeper_organization._post_click
 
 
 if __name__ == "__main__":

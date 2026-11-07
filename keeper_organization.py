@@ -62,34 +62,68 @@ def ensure_organization(engine, native):
     name = engine.cfg.get("organization_name")
     if not name:
         return {"switched": False}  # 未配置不检查
-    window = _main_window(ax, app)
-    frame = ax.frame(window)
-    # 头像按钮：主窗口左上角区域的 Button（实测 62x38）
-    avatar = None
-    for node, _depth in _walk(ax, window):
-        if ax.ax_get(node, "AXRole") != "AXButton":
-            continue
-        f = ax.frame(node)
-        if (f and frame[0] - 5 <= f[0] <= frame[0] + 90
-                and frame[1] - 5 <= f[1] <= frame[1] + 70
-                and 30 <= f[2] <= 90 and 25 <= f[3] <= 60):
-            avatar = node
+    for attempt in (1, 2):  # 瞬态窗口状态重试一次（2026-11-07 launchd 巡逻偶发找不到按钮）
+        app = engine.ax.application()[1]
+        window = _main_window(ax, app)
+        frame = ax.frame(window)
+        # 头像按钮：主窗口左上角区域的 Button（实测 62x38）。放宽尺寸只看位置，
+        # 找不到时以窗口相对坐标兜底（左上角 11,35 处的 62x38 区域）。
+        avatar, buttons_seen = None, 0
+        for node, _depth in _walk(ax, window):
+            if ax.ax_get(node, "AXRole") != "AXButton":
+                continue
+            f = ax.frame(node)
+            if not f:
+                continue
+            buttons_seen += 1
+            if (frame[0] - 5 <= f[0] <= frame[0] + 120
+                    and frame[1] - 5 <= f[1] <= frame[1] + 90):
+                avatar = node
+                break
+        if avatar is None and attempt == 2:
+            # 坐标兜底：合成窗口相对 (11,35,62,38) 的点击区域节点
+            avatar = {"AXRole": "AXButton",
+                      "frame": (frame[0] + 11, frame[1] + 35, 62, 38)}
+            ax_click_fallback(ax, avatar, window)
+        elif avatar is not None:
+            ax.click(avatar, window)
+        engine.sleep(2)
+        # 面板内找目标组织行
+        row = None
+        for node, _depth in _walk(ax, window):
+            if name in _text(ax, node):
+                row = node
+                break
+        if row is not None:
             break
-    if avatar is None:
-        raise KeeperError("org_switcher_not_found", "Avatar/org button not found in main window", 3)
-    ax.click(avatar, window)
-    engine.sleep(2)
-    # 面板内找目标组织行
-    row = None
-    for node, _depth in _walk(ax, window):
-        if name in _text(ax, node):
-            row = node
-            break
+        if attempt == 1:
+            engine.sleep(3)
     if row is None:
         raise KeeperError("organization_not_listed",
-                          f"Target organization row not found in switcher panel: {name}", 3)
+                          f"Target organization row not found in switcher panel: {name} "
+                          f"(main window {tuple(int(v) for v in (frame or (0, 0, 0, 0)))}, "
+                          f"buttons_seen={buttons_seen})", 3)
     ax.click(row, window)
     # 等组织内容出现（切换有加载过程）
     engine.wait(lambda: org_visible(ax, engine.ax.application()[1], engine.cfg), bool,
                 "organization_switch_timeout", timeout=25)
     return {"switched": True, "organization": name}
+
+
+def _post_click(cx, cy):
+    """Real mouse click at screen coords (tests monkeypatch this)."""
+    import time as _t
+    import Quartz
+    from CoreFoundation import CGPoint
+    for kind in (Quartz.kCGEventLeftMouseDown, Quartz.kCGEventLeftMouseUp):
+        Quartz.CGEventPost(Quartz.kCGHIDEventTap,
+                           Quartz.CGEventCreateMouseEvent(None, kind, CGPoint(cx, cy), 0))
+        _t.sleep(0.05)
+
+
+def ax_click_fallback(ax, node, window):
+    """Coordinate click at the node's frame center (for synthesized nodes without AX handles)."""
+    f = ax.frame(node)
+    if not f:
+        raise KeeperError("org_switcher_not_found", "Fallback click without geometry", 3)
+    _post_click(f[0] + f[2] / 2, f[1] + f[3] / 2)
