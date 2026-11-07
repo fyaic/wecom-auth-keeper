@@ -113,3 +113,9 @@ CLI 与 webhook 可组合：常规通知走 webhook（带 @），需要发文件
 ### 私聊场景说明
 
 `<@userid>` 在**单聊**里也是黑色普通文字——单聊本无 @ 语义（双方都收全部提醒），属预期行为，无需处理。
+
+## 官方文档依据（2026-11-07 核验）
+
+- [消息推送配置说明（企业微信开发者中心）](https://developer.work.weixin.qq.com/document/path/91770)：`<@userid>` 扩展语法为**消息推送（原群机器人）text/markdown 专属**；**markdown_v2 不支持** @（要 @ 就用 v1 markdown，别升级 v2）。
+- [WecomTeam/wecom-cli 官方技能文档](https://github.com/WecomTeam/wecom-cli)（wecomcli-message）：CLI 两条发送路径均无任何 @ 语法——与本文实测一致。
+- 结论：**@ 是 webhook 群机器人通道的专属能力**；aibot 消息通道（CLI 或直连）不具备，属平台设计而非用法问题。
