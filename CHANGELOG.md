@@ -12,11 +12,12 @@
 
 - Separate first-time Bot selection/binding, organization verification and private-chat link preparation from recurring renewal; do not search history before an entry exists.
 - Add a private one-time message generator (never sends) and a GUI launchd entry verifier that starts from another chat/organization, checks the selected CLI identity and official page, reads configured rows, and closes the page.
-- New onboarding configs block maintenance and schedule generation until their device/config-bound entry receipt exists; existing deployed configs are not migrated automatically. Persist the CLI absolute path for launchd.
+- New onboarding configs block maintenance and schedule generation until their device/config-bound entry receipt exists; existing deployed configs are not migrated automatically. Persist both CLI and Node paths for launchd, verified against two existing profiles under a minimal PATH on the remote Mac.
 - Record the installer’s private-chat provenance separately from machine-verified chat title/link/navigation; keep first grants, real renewal and scheduled execution as distinct acceptance stages.
 - Harden authorization actions to live controls inside the bound page, with no mouse fallback. Allow passive existing-page inspection and bound page cleanup without changing legacy Bridge.
 - Recognize the native contacts Bot directory reached by “查看更多机器人”: AXOutline rows and Bot badges, distinct from management cards. Report visible candidates without exposing contact names or claiming full enumeration/identity verification.
 - Allow native-only GUI inspection before Bot configuration exists, using an explicit execution Python; it lists visible Bot candidates without permitting renewal, messages or grants. Permit empty candidate-chat navigation when needed to inspect identity, while keeping identity verification before sending.
+- Document “更多 → 通讯录 → 智能机器人” for portals without “查看更多机器人”; independently navigate five remote organizations with before/after native selection checks. Directory discovery remains separate from Bot identity and renewal acceptance.
 - These are internal preview changes. The new first-run flow and remote unattended renewal still require live acceptance; unit tests do not establish business release readiness.
 
 ### Remote acceptance fixes — 2026-11-06
