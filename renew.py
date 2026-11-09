@@ -11,8 +11,9 @@ import re
 import sys
 import time
 import urllib.request
-from urllib.parse import parse_qs, urlencode, urlsplit
+from urllib.parse import parse_qs, urlsplit
 
+from keeper_bootstrap import authorization_url
 from keeper_common import KeeperError, atomic_json, emit_error, executable, gui_lock_path, load_config, process_lock
 
 ZW = re.compile(r"[\u200b\u200c\u200d\ufeff\ufffc]")
@@ -21,6 +22,29 @@ from keeper_capabilities import CAPABILITY_LABELS
 
 def clean(value):
     return ZW.sub("", str(value or "")).strip()
+
+
+def permission_page_error(texts):
+    """Classify fixed official-page failures, never nicknames or chat text.
+
+    The caller must first bind the WebArea to both Bot identifiers. A title or
+    an empty/loading body is not a successful permission response.
+    """
+    text = ''.join(clean(value) for value in texts)
+    if '当前账号非机器人所属企业' in text:
+        return 'authorization_organization_mismatch'
+    if '暂无法授权' in text and '仅限机器人创建者可进行授权' in text:
+        return 'authorization_creator_required'
+    if '暂无法授权，机器人已删除' in text:
+        return 'authorization_bot_deleted'
+    return None
+
+
+PAGE_ERROR_MESSAGES = {
+    'authorization_creator_required': 'The official page requires the Bot creator in the current desktop context; verify the existing profile, desktop identity and organization without rebinding the CLI',
+    'authorization_organization_mismatch': 'The official page reports that the current account is outside the Bot organization; verify the native organization and existing desktop identity',
+    'authorization_bot_deleted': 'The official page reports that this Bot was deleted; preserve the existing CLI configuration and resolve the business target',
+}
 
 
 def parse_expiry(text, now=None):
@@ -206,9 +230,7 @@ class Renewal:
         if existing_only:
             raise KeeperError("page_not_open", "Open the target bot's permissions page first")
         if send_link:
-            link = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?" + urlencode({
-                "from": "chat", "forceInnerBrowser": "1", "aibotid": self.cfg["aibotid"],
-                "str_aibotid": self.cfg["str_aibotid"], "type": "1"})
+            link = authorization_url(self.cfg)
             response = bridge_request(self.cfg, "POST", "/wecom/send", {
                 "to": self.cfg["bot_chat_name"], "message": "授权续期入口 " + link,
                 "idempotency_key": "wecom-renew-" + str(time.time_ns())})
@@ -302,6 +324,9 @@ class Renewal:
             role, text, bounds = self.ax.ax_get(node, "AXRole"), self.text(node), self.ax.frame(node)
             if role in {"AXStaticText", "AXButton"} and text and bounds:
                 elements.append((text, node, bounds, role))
+        error = permission_page_error(e[0] for e in elements)
+        if error:
+            raise KeeperError(error, PAGE_ERROR_MESSAGES[error])
         # Capability descriptions can repeat the heading (e.g. contacts).
         # Headings share the leftmost column; description chips are indented.
         columns = [e[2][0] for e in elements if e[0] in CAPABILITY_LABELS.union(self.rows)]

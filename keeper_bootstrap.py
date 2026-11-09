@@ -46,13 +46,8 @@ def device_binding():
     return hashlib.sha256(json.dumps(value).encode()).hexdigest()
 
 
-def entry_message(cfg):
-    for key in ('aibotid', 'str_aibotid', 'bot_chat_name', 'organization_selector_name'):
-        value = cfg.get(key)
-        if not isinstance(value, str) or not value.strip() or value.startswith('<'):
-            raise ValueError('target_binding_incomplete')
-    if not cfg['aibotid'].isdigit():
-        raise ValueError('target_binding_incomplete')
+def authorization_url(cfg):
+    """One URL contract for installation messages and the legacy Bridge sender."""
     if 'authorization_url' in cfg:
         url = cfg['authorization_url']
         if authorization_identity(url) != {k: cfg[k] for k in ('aibotid', 'str_aibotid')}:
@@ -65,7 +60,17 @@ def entry_message(cfg):
         url = 'https://work.weixin.qq.com/ai/aiHelper/authorizationList?' + urlencode({
             'from': 'chat', 'forceInnerBrowser': '1', 'aibotid': cfg['aibotid'],
             'str_aibotid': cfg['str_aibotid'], 'type': '1'})
-    return ENTRY_MARKER + '\n此消息用于本设备的权限续期，请保留，无需回复。\n' + url + '\n'
+    return url
+
+
+def entry_message(cfg):
+    for key in ('aibotid', 'str_aibotid', 'bot_chat_name', 'organization_selector_name'):
+        value = cfg.get(key)
+        if not isinstance(value, str) or not value.strip() or value.startswith('<'):
+            raise ValueError('target_binding_incomplete')
+    if not cfg['aibotid'].isdigit():
+        raise ValueError('target_binding_incomplete')
+    return ENTRY_MARKER + '\n此消息用于本设备的权限续期，请保留，无需回复。\n' + authorization_url(cfg) + '\n'
 
 
 def entry_status(cfg):

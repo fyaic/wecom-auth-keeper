@@ -91,6 +91,33 @@ class Fixture(unittest.TestCase):
 
 
 class StateTests(Fixture):
+    def test_official_creator_rejection_stops_without_any_permission_action(self):
+        ax = FakeAX(self.cfg)
+        ax.page['AXChildren'] = [node('AXStaticText',
+            '暂无法授权，仅限机器人创建者可进行授权。请联系机器人创建者进行处理。')]
+        with self.assertRaises(KeeperError) as caught:
+            self.engine(ax).run('renew', True)
+        self.assertEqual(caught.exception.code, 'authorization_creator_required')
+        self.assertEqual(ax.clicks, [])
+
+    def test_only_bound_page_can_supply_access_failure(self):
+        ax = FakeAX(self.cfg)
+        error = node('AXStaticText', '暂无法授权，仅限机器人创建者可进行授权。')
+        ax.window['AXChildren'].append(error)
+        self.assertTrue(all(r['status']=='authorized' for r in self.engine(ax).read_rows(ax.window).values()))
+        ax.page['AXChildren'] = [error]
+        ax.page['AXURL'] = ax.page['AXURL'].replace('str_aibotid=fixture','str_aibotid=other')
+        with self.assertRaises(KeeperError) as caught:self.engine(ax).read_rows(ax.window)
+        self.assertEqual(caught.exception.code,'identity_unverified')
+
+    def test_terminal_page_errors_and_loading_are_distinct(self):
+        cases = [(['可使用权限'], None), ([], None),
+                 (['暂无法授权，', '仅限机器人创建者可进行授权。'], 'authorization_creator_required'),
+                 (['当前账号非机器人所属企业，暂无法授权，仅限机器人创建者可进行授权。'], 'authorization_organization_mismatch'),
+                 (['暂无法授权，机器人已删除。'], 'authorization_bot_deleted')]
+        for texts, expected in cases:
+            self.assertEqual(renew.permission_page_error(texts), expected)
+
     def test_contacts_description_does_not_duplicate_heading(self):
         self.cfg['target_rows'] = ['搜索企业成员']
         ax = FakeAX(self.cfg)

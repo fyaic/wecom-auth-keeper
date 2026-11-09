@@ -93,11 +93,11 @@ def verify_navigation(cfg, ax, *, engine=None):
         ax.click(link, chat)
         window = engine.wait(engine.select_window, lambda value: value is not None, 'page_not_open')
         engine.bound(window)
+        result['page_identity_verified'] = True
         rows = engine.wait(lambda: engine.read_rows(window),
                            lambda values: all(r['status'] in ('authorized', 'expired') for r in values.values()),
                            'rows_incomplete')
-        result.update(page_identity_verified=True,
-                      rows={n: {'status': r['status'], 'expiry': r['expiry'].isoformat(timespec='minutes')
+        result.update(rows={n: {'status': r['status'], 'expiry': r['expiry'].isoformat(timespec='minutes')
                                 if r['expiry'] else None} for n, r in rows.items()})
         # The same bare “授权” button can mean an expired grant or a scope
         # never granted to this Bot. Do not turn first-run discovery into an

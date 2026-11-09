@@ -16,7 +16,7 @@ from keeper_common import emit_error, load_config
 from keeper_accessibility import exposed_tree
 from keeper_navigation import sidebar_rows
 from keeper_organization import menu_rows
-from renew import Renewal, target_url
+from renew import Renewal, target_url, permission_page_error
 
 
 class NativeInspection:
@@ -183,12 +183,18 @@ def snapshot(engine, native, cfg, ax):
             page = {'matches_configured_bot': cfg is not None and any(target_url(v, cfg) for v in values),
                     'bounds': ax.frame(node), 'permission_controls': []}
             entry['official_permission_pages'].append(page)
+            page_text = []
             for control in engine.walk(node):
                 text = engine.text(control)
+                if ax.ax_get(control, 'AXRole') in {'AXStaticText', 'AXButton'}:
+                    page_text.append(text)
                 if text in PERMISSION_LABELS:
                     page['permission_controls'].append({'label': text, 'role': ax.ax_get(control, 'AXRole'),
                                                         'actions': ax.action_names(control)})
-            if page['matches_configured_bot']:
+            # Report the fixed classification, never a creator's name or raw
+            # error body. Unconfigured inspection cannot establish Bot identity.
+            page['blocking_error'] = permission_page_error(page_text)
+            if page['matches_configured_bot'] and not page['blocking_error']:
                 rows = engine.read_rows(window)
                 page['target_rows'] = {name: {'status': row['status'],
                     'expiry': row['expiry'].isoformat(timespec='minutes') if row['expiry'] else None}

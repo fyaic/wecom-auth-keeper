@@ -61,6 +61,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 `bootstrap_authorization_baseline_required` 表示入口和页面已读到，但所选权限没有有效期证据。仅一个“授权”按钮不能区分从未授权与过期；先核对既有授权或完成用户确认的一次首次授权，再重验建立基线，不重复发送链接或搜索历史。此时不生成成功回执，不开启维护。
 
+`authorization_creator_required` 表示双ID匹配的官方页面明确要求机器人创建者；它不是辅助功能不足、按钮失效或未绑定。`authorization_organization_mismatch` 与 `authorization_bot_deleted` 分别表示官方企业身份限制和Bot已删除。保留原profile，按 FIRST-RUN.md 核对桌面/组织上下文；不要让业务人员重新扫码绑定。只读页面加载要等权限行或明确错误，标题和HTTP/打开返回码不足以通过。缺少Bot私聊时，FIRST-RUN.md允许在已授权范围内用本人会话临时诊断，但它不能代替正式Bot私聊验收。
+
 | 工具 | 用途及限制 |
 | --- | --- |
 | `existing_entry.py --cli ... --profile ... --output ...` | 复用已有 CLI，通过只读官方调用取得原始续期链接；不初始化、不读凭据、不发送，不能替代组织/私聊核验。 |

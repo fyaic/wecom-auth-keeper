@@ -9,6 +9,18 @@ inspection = module('desktop_inspect')
 
 
 class DesktopInspectionTests(Fixture):
+    def test_creator_error_is_reported_without_private_body_or_success_rows(self):
+        ax = self.adapter()
+        ax.page['AXChildren'] = [node('AXStaticText',
+            '暂无法授权，仅限机器人创建者可进行授权。请联系机器人创建者 private-name 进行处理。')]
+        for cfg in (self.cfg, None):
+            result = inspection.inspect_desktop(cfg, ax)
+            page = result['windows'][0]['official_permission_pages'][0]
+            self.assertEqual(page['blocking_error'], 'authorization_creator_required')
+            self.assertNotIn('target_rows', page)
+            self.assertNotIn('private-name', json.dumps(result))
+            self.assertFalse(result['renewal_verified'])
+
     def adapter(self):
         ax = FakeAX(self.cfg)
         ax.client_version = lambda _: '5.0.13'

@@ -19,6 +19,9 @@ Installation order:
    Expiry (`850003`), missing chat history, a renamed Bot or an unverified desktop
    identity never justifies `auth init`, a new profile or a QR code. Only a
    genuinely missing binding with a confirmed new-setup request uses first-time setup.
+   Read the bound page's completed response before proceeding: a creator or
+   organization rejection is an identity/access blocker, not a missing button.
+   Preserve the existing binding; do not attempt to fix it by initializing again.
 2. Verify the Bot's organization using the native enterprise menu and the Bot's
    official identity. “Manage robots” is not the complete list of usable Bots.
    On WeCom 5.0.13, “查看更多机器人” opens the contacts Bot directory.

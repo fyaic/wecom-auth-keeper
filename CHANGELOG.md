@@ -10,6 +10,8 @@
 
 ### First-run Bot and chat entry preparation — 2026-11-09
 
+- Recover exact official renewal URLs from existing authorized CLI profiles; do not reinitialize because a scope expired or a chat is missing. Preserve native URL parameters in both installer and legacy Bridge link delivery.
+- Recognize creator-only, organization and deleted-Bot errors inside the identity-bound permission page. Stop before permission actions, retain the original reason through cleanup, and document a temporary own-account diagnostic carrier without treating it as a Bot-chat or renewal pass.
 - Separate first-time Bot selection/binding, organization verification and private-chat link preparation from recurring renewal; do not search history before an entry exists.
 - Add a private one-time message generator (never sends) and a GUI launchd entry verifier that starts from another chat/organization, checks the selected CLI identity and official page, reads configured rows, and closes the page.
 - New onboarding configs block maintenance and schedule generation until their device/config-bound entry receipt exists; existing deployed configs are not migrated automatically. Persist both CLI and Node paths for launchd, verified against two existing profiles under a minimal PATH on the remote Mac.

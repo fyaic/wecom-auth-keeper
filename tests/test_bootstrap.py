@@ -107,6 +107,17 @@ class BootstrapTests(Fixture):
         self.assertTrue(all(env['WECOM_CLI_CONFIG_DIR']=='/private/selected' for _,env in calls))
         self.assertFalse(any('init' in args for args,_ in calls))
 
+    def test_legacy_bridge_sender_also_preserves_official_url(self):
+        from renew import Renewal
+        self.draft()
+        ax=Mock();ax.application.return_value=(object(),object())
+        engine=Renewal(self.cfg,ax,sleep=lambda _:None)
+        with patch.object(engine,'select_window',return_value=None), \
+             patch.object(engine,'visible_links',side_effect=KeeperError('end_probe','after_send')), \
+             patch('renew.bridge_request',return_value={'success':True}) as request:
+            with self.assertRaises(KeeperError):engine.open(send_link=True)
+        self.assertEqual(request.call_args.args[3]['message'],'授权续期入口 '+self.cfg['authorization_url'])
+
     def flow(self, *, same_chat=False, links=True, final_org='Enterprise B'):
         self.draft()
         engine, ax = Mock(), Mock()
@@ -161,6 +172,19 @@ class BootstrapTests(Fixture):
         self.assertEqual(result['authorization_baseline_required'],[name])
         self.assertFalse(result['authorization_changed'])
         self.assertFalse(result['ok'])
+        engine.close_window.assert_called_once()
+
+    def test_creator_rejection_preserves_reason_and_closes_without_receipt(self):
+        from contextlib import ExitStack
+        engine,ax,patches=self.flow()
+        engine.read_rows.side_effect=KeeperError('authorization_creator_required','Official creator restriction')
+        with ExitStack() as stack:
+            for p in patches:stack.enter_context(p)
+            with self.assertRaises(KeeperError) as caught:entry.verify_navigation(self.cfg,ax,engine=engine)
+        self.assertEqual(caught.exception.code,'authorization_creator_required')
+        self.assertFalse(caught.exception.entry_verification['ok'])
+        self.assertTrue(caught.exception.entry_verification['cleanup_verified'])
+        self.assertFalse(Path(self.cfg['entry_receipt']).exists())
         engine.close_window.assert_called_once()
 
     def test_open_timeout_still_closes_bound_page_and_preserves_primary_error(self):
