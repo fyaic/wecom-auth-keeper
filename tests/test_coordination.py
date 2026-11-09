@@ -10,7 +10,7 @@ from unittest.mock import patch
 
 from keeper_common import KeeperError, cli_environment, load_config, process_lock
 from renew import monitor_guard
-from test_delivery import module
+from test_delivery import module, selection_for
 
 profiles = module('profiles')
 onboard = module('onboard')
@@ -84,6 +84,8 @@ class CoordinationTests(unittest.TestCase):
                 output = 'authorized' if kwargs['env'].get('WECOM_CLI_CONFIG_DIR') is None else 'unauthorized'
             elif args[1:] == ['identity','whoami']:
                 output = '{"extra_identity_context":"private fixture"}'
+            elif args[1:] == ['auth','show']:
+                output = 'Bot ID: fixture\n'
             else:
                 self.fail('unexpected CLI operation')
             return subprocess.CompletedProcess(args,0,output,'')
@@ -103,12 +105,12 @@ class CoordinationTests(unittest.TestCase):
                 profiles.inspect_profiles('fixture', [], report, run=run)
 
     def test_onboarding_keeps_business_org_and_profile_without_activating_switch(self):
-        value = {'bot_chat_name':'test','organization_name':'org B','cli_bot_id':'fixture',
+        value = {'bot_chat_name':'test','organization_name':'org B','organization_selector_name':'org B','cli_bot_id':'fixture',
                  'authorization_url':'https://work.weixin.qq.com/ai/aiHelper/authorizationList?aibotid=123&str_aibotid=fixture',
                  'target_rows':['搜索与获取文档内容'], 'cli_config_dir':'/private/second-bot'}
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / 'config.json'
-            onboard.configure(value,path,'Darwin')
+            onboard.configure(value,path,'Darwin',selection=selection_for(value))
             cfg=json.loads(path.read_text())
             self.assertEqual(cfg['expected_organization'],'org B')
             self.assertEqual(cfg['cli_config_dir'],'/private/second-bot')

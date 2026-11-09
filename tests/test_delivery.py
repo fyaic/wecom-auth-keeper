@@ -15,10 +15,18 @@ verify = module('verify_bundle')
 builder = module('build_bundle')
 gui = module('gui')
 discovery = module('discover')
+selector = module('select_target')
+
+def selection_for(value):
+    return selector.select({**value, 'selection_source':'user_request',
+                            'identity_source':'native_selected_bot_permission_page'},
+                           {'schema_version':2, 'profiles':[{'status':'authorized',
+                            'cli_config_dir':value.get('cli_config_dir'), 'cli_bot_id':value['cli_bot_id']}]})
 
 class DeliveryTests(unittest.TestCase):
     def data(self):
         return {'bot_chat_name':'fixture','organization_name':'fixture org', 'cli_bot_id':'fixture',
+                'organization_selector_name':'fixture org',
                 'authorization_url':'https://work.weixin.qq.com/ai/aiHelper/authorizationList?aibotid=123&str_aibotid=fixture',
                 'target_rows':['发送消息','搜索与获取文档内容']}
 
@@ -30,13 +38,13 @@ class DeliveryTests(unittest.TestCase):
     def test_private_config_defaults_do_not_enable_heuristic_org_switch(self):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'private.json'
-            self.assertTrue(onboard.configure(self.data(),p,'Darwin')['ok'])
+            self.assertTrue(onboard.configure(self.data(),p,'Darwin',selection=selection_for(self.data()))['ok'])
             cfg=json.loads(p.read_text())
             self.assertEqual(cfg['maintenance']['within_hours'],24)
             self.assertEqual(len(cfg['target_rows']),2)
             self.assertNotIn('organization_name',cfg)
             self.assertEqual(p.stat().st_mode & 0o777,0o600)
-            with self.assertRaises(FileExistsError): onboard.configure(self.data(),p,'Darwin')
+            with self.assertRaises(FileExistsError): onboard.configure(self.data(),p,'Darwin',selection=selection_for(self.data()))
 
     def test_wrong_bot_url_or_scope_never_writes(self):
         variants=[{'cli_bot_id':'another'}, {'target_rows':['未知权限']}, {'target_rows':['发送消息','发送消息']},
@@ -47,14 +55,14 @@ class DeliveryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'private.json'
             for change in variants:
-                with self.assertRaises(ValueError): onboard.configure({**self.data(),**change},p,'Darwin')
+                with self.assertRaises(ValueError): onboard.configure({**self.data(),**change},p,'Darwin',selection=selection_for(self.data()))
                 self.assertFalse(p.exists())
 
     def test_package_disallows_sensitive_source_paths(self):
         self.assertNotIn('config.didadi.example.json',builder.FILES)
         self.assertNotIn('scripts/inspect_compat.py',builder.FILES)
         self.assertTrue(all(not n.endswith(('.log','.env')) for n in builder.FILES))
-        with self.assertRaises(ValueError): onboard.configure(self.data(),ROOT/'private.json','Darwin')
+        with self.assertRaises(ValueError): onboard.configure(self.data(),ROOT/'private.json','Darwin',selection=selection_for(self.data()))
 
     def test_integrity_rejects_tampering_and_traversal(self):
         import hashlib

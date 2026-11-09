@@ -10,6 +10,7 @@
 
 ### First-run Bot and chat entry preparation — 2026-11-09
 
+- Pin the user-requested Bot before profile selection. Match its native official identity to a stable CLI inventory; an authorized default profile cannot replace the requested target. New onboarding requires a successful explicit selection record, and existing-entry queries reject profile drift before business calls.
 - Recover exact official renewal URLs from existing authorized CLI profiles; do not reinitialize because a scope expired or a chat is missing. Preserve native URL parameters in both installer and legacy Bridge link delivery.
 - Recognize creator-only, organization and deleted-Bot errors inside the identity-bound permission page. Stop before permission actions, retain the original reason through cleanup, and document a temporary own-account diagnostic carrier without treating it as a Bot-chat or renewal pass.
 - Separate first-time Bot selection/binding, organization verification and private-chat link preparation from recurring renewal; do not search history before an entry exists.

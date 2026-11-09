@@ -9,7 +9,7 @@ from unittest.mock import Mock, patch
 import maintain
 from keeper_bootstrap import device_binding, entry_message, entry_status, require_entry, target_binding
 from keeper_common import KeeperError, atomic_json, cli_environment
-from test_delivery import module
+from test_delivery import module, selection_for
 from test_keeper import Fixture
 
 entry = module('verify_entry')
@@ -81,7 +81,7 @@ class BootstrapTests(Fixture):
         value={'bot_chat_name':'fixture','organization_name':'Business B','organization_selector_name':'Enterprise B',
                'cli_bot_id':'fixture','authorization_url':url,'target_rows':['发送消息']}
         path=self.root/'new.json'
-        onboard.configure(value,path,'Darwin')
+        onboard.configure(value,path,'Darwin',selection=selection_for(value))
         cfg=json.loads(path.read_text())
         self.assertEqual(cfg['authorization_url'],url)
         self.assertEqual(entry_message(cfg).splitlines()[-1],url)
@@ -225,7 +225,7 @@ class BootstrapTests(Fixture):
                'target_rows':['发送消息']}
         path=self.root/'new.json'
         with patch.object(onboard.shutil,'which',side_effect=lambda name:'/opt/homebrew/bin/'+name):
-            result=onboard.configure(value,path,'Darwin')
+            result=onboard.configure(value,path,'Darwin',selection=selection_for(value))
         self.assertEqual(result['status'],'entry_preparation_required')
         cfg=json.loads(path.read_text())
         self.assertEqual(cfg['wecom_cli'],'/opt/homebrew/bin/wecom-cli')

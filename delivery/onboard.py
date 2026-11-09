@@ -13,7 +13,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from keeper_capabilities import CAPABILITY_LABELS
-from keeper_bootstrap import authorization_identity
+from keeper_bootstrap import authorization_identity, require_target_selection
 
 
 def detect(system=None):
@@ -34,13 +34,13 @@ def detect(system=None):
             'ui_access': 'not_checked', 'scheduler_installed': False}
 
 
-def configure(value, destination, system=None):
+def configure(value, destination, system=None, *, selection=None):
     if (system or platform.system()) != 'Darwin':
         raise ValueError('unsupported_automation_backend')
     if not isinstance(value, dict):
         raise ValueError('invalid_input')
-    required = {'bot_chat_name', 'authorization_url', 'cli_bot_id', 'target_rows', 'organization_name'}
-    if not required <= set(value) or set(value) - required - {'cli_config_dir', 'organization_selector_name', 'wecom_cli', 'wecom_node'}:
+    required = {'bot_chat_name', 'authorization_url', 'cli_bot_id', 'target_rows', 'organization_name', 'organization_selector_name'}
+    if not required <= set(value) or set(value) - required - {'cli_config_dir', 'wecom_cli', 'wecom_node'}:
         raise ValueError('invalid_input_fields')
     profile = value.get('cli_config_dir')
     if profile is not None and (not isinstance(profile, str) or not profile.strip() or not Path(profile).is_absolute()):
@@ -65,6 +65,7 @@ def configure(value, destination, system=None):
     bot = identity['str_aibotid']
     if bot != value['cli_bot_id']:
         raise ValueError('cli_bot_identity_mismatch')
+    require_target_selection(selection, value)
     rows = value['target_rows']
     if (not isinstance(rows, list) or not rows or any(not isinstance(r, str) or r not in CAPABILITY_LABELS for r in rows)
             or len(set(rows)) != len(rows)):
@@ -75,6 +76,8 @@ def configure(value, destination, system=None):
     key = hashlib.sha256((identity['aibotid'] + ':' + bot).encode()).hexdigest()[:12]
     state = destination.parent / ('state-' + key)
     cfg = {'bot_chat_name': value['bot_chat_name'], **identity, 'authorization_url': value['authorization_url'],
+           'target_selection': {k: selection[k] for k in ('selection_source', 'identity_source',
+                                'bot_chat_name', 'organization_selector_name', 'authorization_identity')},
            'target_rows': rows, 'chat_history_navigation': True, 'bridge_send_link': False,
            'bridge_monitor': False, 'venv_python': str(ROOT / '.venv/bin/python3'),
            'state_file': str(state / 'state.json'), 'log_file': str(state / 'run.log'),
@@ -105,18 +108,23 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--input', help='Private local JSON; never paste into shared reports')
     p.add_argument('--output', help='New private config outside the extracted release')
+    p.add_argument('--selection', help='Successful private select_target.py result; required for onboarding')
     args = p.parse_args()
     try:
         if bool(args.input) != bool(args.output):
             raise ValueError('input_and_output_required_together')
-        report = configure(json.loads(Path(args.input).read_text()), args.output) if args.input else detect()
+        if args.input and not args.selection:
+            raise ValueError('target_selection_required')
+        report = configure(json.loads(Path(args.input).read_text()), args.output,
+                           selection=json.loads(Path(args.selection).read_text())) if args.input else detect()
         code = 0 if report.get('ok') or report['status'] == 'needs_device_acceptance' else 3
     except Exception as exc:
         known = str(exc) if type(exc) is ValueError and str(exc) in {
             'unsupported_automation_backend', 'invalid_input', 'invalid_input_fields',
             'missing_identity_or_organization', 'invalid_authorization_url', 'cli_bot_identity_mismatch',
             'invalid_permission_allowlist', 'private_config_must_be_outside_release',
-            'input_and_output_required_together', 'invalid_cli_profile', 'invalid_cli_executable'} else 'input_or_output_unavailable'
+            'input_and_output_required_together', 'invalid_cli_profile', 'invalid_cli_executable',
+            'target_selection_required', 'requested_target_mismatch'} else 'input_or_output_unavailable'
         report, code = {'ok': False, 'error': known}, 3
     print(json.dumps(report, ensure_ascii=False))
     return code

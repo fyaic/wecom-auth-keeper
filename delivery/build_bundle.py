@@ -12,7 +12,7 @@ FILES = ['LICENSE', 'AGENTS.md', 'requirements-macos.txt', 'renew.py', 'maintain
          'keeper_common.py', 'keeper_navigation.py', 'keeper_organization.py', 'keeper_maintenance.py', 'keeper_accessibility.py',
          'keeper_capabilities.py', 'keeper_cleanup.py', 'config.maintenance.example.json',
          'keeper_bootstrap.py', 'delivery/prepare_entry.py', 'delivery/verify_entry.py', 'delivery/FIRST-RUN.md',
-         'delivery/onboard.py', 'delivery/profiles.py', 'delivery/existing_entry.py', 'delivery/verify_bundle.py', 'delivery/gui.py', 'delivery/discover.py',
+         'delivery/onboard.py', 'delivery/profiles.py', 'delivery/select_target.py', 'delivery/existing_entry.py', 'delivery/verify_bundle.py', 'delivery/gui.py', 'delivery/discover.py',
          'delivery/desktop_inspect.py', 'delivery/START-HERE.md',
          'delivery/AGENT-INSTALL.md', 'delivery/BRIDGE-COORDINATION.md', 'delivery/DESIGN.md', 'delivery/VALIDATION.md', 'delivery/acceptance.example.json']
 

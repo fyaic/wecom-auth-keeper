@@ -11,24 +11,24 @@ page as proof of successful unattended renewal.
 
 Installation order:
 
-0. This distribution supports a desktop logged in as the Bot creator's primary
+0. Record the user's requested Bot and organization first. Explicit user intent
+   outranks a business service's profile and the terminal default. Never replace
+   a requested test Bot with an authorized default business Bot. This distribution supports a desktop logged in as the Bot creator's primary
    account, maintaining Bots created by that account. Existing CLI credentials
    alone do not satisfy this requirement. Establish it from the existing CLI and
    official UI identity before enabling maintenance; preserve bindings and stop
    installation on a creator rejection. Do not switch the login of a desktop
    used by another service without the user's authorization.
-1. Discover the business service's actual CLI profile and intended Bot. Use the
-   official CLI to inspect identity; do not read credentials or replace another
-   Bot's binding. For an authorized existing profile, run
-   `delivery/existing_entry.py` to recover its exact official renewal URL from a
-   read-only CLI response before exploring the UI. Preserve all URL parameters.
+1. Inventory known CLI profiles with `delivery/profiles.py`. Use official CLI
+   identity reads; do not read credentials or replace another Bot's binding.
+   An authorized default profile is only a candidate, never an automatic target.
    Expiry (`850003`), missing chat history, a renamed Bot or an unverified desktop
    identity never justifies `auth init`, a new profile or a QR code. Only a
    genuinely missing binding with a confirmed new-setup request uses first-time setup.
    Read the bound page's completed response before proceeding: a creator or
    organization rejection is an identity/access blocker, not a missing button.
    Preserve the existing binding; do not attempt to fix it by initializing again.
-2. Verify the Bot's organization using the native enterprise menu and the Bot's
+2. Verify the requested Bot's organization using the native enterprise menu and the Bot's
    official identity. “Manage robots” is not the complete list of usable Bots.
    On WeCom 5.0.13, “查看更多机器人” opens the contacts Bot directory.
    If absent, use “更多 → 通讯录 → 智能机器人”; sidebar positions vary
@@ -36,6 +36,13 @@ Installation order:
    Use config-free `gui.py --action inspect-expanded --python <absolute-python>`
    with a new private evidence directory before Bot IDs are available; never
    fabricate IDs just to run diagnostics.
+   Record the requested Bot's actual native permission-page identity, then run
+   `select_target.py` against the profile inventory. No match means this target's
+   CLI preparation is unresolved, not that the entire device lacks creator
+   access. Multiple matches require an explicit profile choice. Only a matched
+   selection may feed `existing_entry.py --selection ...` and `onboard.py
+   --selection ...`. Keep the original official URL parameters. Do not use an
+   error from another Bot to reject the requested Bot or send the user elsewhere.
 3. Open this account's private conversation from the verified Bot's details.
    If the permission page is accessible only through a conversation, you may
    first open an empty candidate conversation from a native Bot directory row

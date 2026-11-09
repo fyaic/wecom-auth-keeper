@@ -8,19 +8,19 @@
 
 ## 1. 先确定本机要维护的 Bot
 
-先读本机业务服务已明确使用的 CLI/profile 路径，再盘点；服务实际指定的 profile 比终端默认值更能说明业务目标。不要为找配置读取 Secret/凭据文件，也不要修改业务服务。
+先记录用户明确指定的Bot与组织；用户目标优先于业务服务配置，业务服务配置优先于终端默认值。用户指定测试Bot时，不能因默认CLI已绑定业务Bot就改变测试对象。再盘点本机已知CLI/profile路径；不要为找配置读取Secret/凭据文件，也不要修改业务服务。
 
 先查已知 CLI profile：`delivery/profiles.py` 只调用官方接口，原始身份存到包外私有文件。正确身份命令是 `wecom-cli identity whoami`，不是 `wecom-cli whoami`。`auth show --status` 的 authorized 只表示 CLI 已绑定，不代表业务权限未过期。
 
-**已绑定的设备先从现有 CLI 获取入口，不要要求重新扫码。** 已确定业务 profile 后运行（省略 `--profile` 表示默认配置；自定义配置使用已经查明的绝对路径）：
+**先盘点既有配置，不重新扫码，也不自动选择默认绑定。** 运行：
 
 ```bash
-python3 delivery/existing_entry.py --cli /absolute/path/wecom-cli --node /absolute/path/node --profile /absolute/existing/profile --output /absolute/private/existing-entry.json
+python3 delivery/profiles.py --cli /absolute/path/wecom-cli --profile /absolute/known/profile --output /absolute/private/profiles.json
 ```
 
-工具检查版本、绑定状态和 Bot 身份，执行只读 `message aibot sessions list`。若返回 `850003`，从当次官方 `help_message` 提取续期链接，查询后再次核对绑定未变。身份、过期证据与原链接只写入新的私有报告，不输出会话正文、不读凭据、不调用 `auth init`、不发送消息。CLI 已绑定但权限过期、桌面昵称不同、暂时找不到 Bot 或私聊，都不是重新绑定的理由。不要新建 profile 来绕开定位问题。
+profiles通过查询前后两次`auth show`记录稳定Bot ID；默认配置只是候选，报告`target_selected=false`。随后执行第2步，从用户指定Bot的原生详情/官方页取得身份，再按ID反查profile。不要将默认业务Bot的拒绝结果当成测试Bot的结果。
 
-将报告的 `cli_bot_id` 和 `authorization_url` 用于后续草稿，**原链接逐字保留**，包括 `type`、`for_native`、窗口参数和编码；不自行重组为固定 `type=1`。工具未取得链接时报告 `official_authorization_url_unavailable`，保留已有绑定，继续只读核对官方资料入口；健康消息权限不一定返回链接，不得通过写操作制造错误。取得链接仅证明 CLI 目标，组织、当前桌面身份和私聊仍需核验。
+CLI已绑定但权限过期、昵称不同、暂时找不到Bot或私聊，都不是重新绑定的理由。**目标Bot已存在但尚未找到匹配CLI**是另一种接入状态：继续核对该Bot的现有配置/官方接入方式，保留其他Bot，不要求重建目标，也不能用另一个authorized profile凑数。确需首次绑定的步骤另行按实际官方流程与用户授权处理，不能伪装成日常续期。
 
 | 设备状态 | Agent 应做什么 |
 | --- | --- |
@@ -46,6 +46,15 @@ python3 delivery/existing_entry.py --cli /absolute/path/wecom-cli --node /absolu
 3. 打开候选 Bot 的官方“可使用权限”页；如果资料页没有权限入口，可先从带原生 Bot 标记的通讯录行进入空私聊，再打开聊天中的机器人资料/权限入口。这属于只读定位，身份匹配前不发送消息、不授权、不保存为已通过目标。将 URL 的 `aibotid`、`str_aibotid` 与选定 CLI/官方链接核对。两个组织中的 Bot 分别处理。名称可能变更，最终绑定依靠身份；没有匹配时不改 CLI 去迁就当前页面。
 4. CLI授权真人与当前组织显示名不同时，可能是组织别名；用既有 CLI 的官方身份和该原链接打开后的页面提示核验。不能仅凭名字差异断言不同账号，不通过新扫码“证明”身份，也不能拿另一 Bot 的权限页冒充当前 CLI 的续期证据。
 5. 保存本机映射：CLI profile → Bot 双 ID → 当前 Bot 显示名 → 业务企业名称 → 原生企业菜单准确名称 → 需要维护的权限。原始 ID/URL 只存私有配置。
+
+原生身份取得后，由Agent将实际观察写入包外`target.json`：`selection_source`为`user_request`（用户未指定而业务服务已明确时才用`business_service`），`identity_source`为`native_selected_bot_permission_page`，并记录`bot_chat_name`、`organization_selector_name`和原始`authorization_url`。这些字段由Agent从已指定目标读取，不让业务人员填写技术标识；这是安装记录，不是独立的身份认证证明。
+
+```bash
+python3 delivery/select_target.py --target /absolute/private/target.json --profiles /absolute/private/profiles.json --output /absolute/private/selection.json
+python3 delivery/existing_entry.py --selection /absolute/private/selection.json --cli /absolute/path/wecom-cli --node /absolute/path/node --output /absolute/private/existing-entry.json
+```
+
+只有唯一ID匹配才返回`target_profile_selected`；无匹配是`target_profile_not_found`（仅代表已检查配置范围），多份匹配是`target_profile_ambiguous`，都不会自动选择默认项。existing_entry从selection指定的profile读取，并在业务只读调用前再次核对Bot ID；漂移返回`requested_target_mismatch`。若消息权限过期，从官方850003响应取完整原链接；健康权限未返回链接时保留已读到的官方UI入口，不制造写入错误取链。URL的type、原生参数和编码逐字保留，不重组为固定type=1。取链不代替创建者/组织/私聊核验。
 
 5.0.13 可能恢复上次机器人子页面：先辨认“智能机器人”门户、“我的机器人”列表、“机器人详情”或权限弹窗，再决定下一步。切页后原生 AX 树可能需要重新请求展开；单纯保持 AXEnhancedUserInterface=true 不证明新树可读。`inspect-expanded` 是诊断手段，不能把搜索框里自己输入的 Bot 名称当作已找到 Bot。Bridge 的组织接口返回 success/缓存当前组织也不代替原生选中标记。
 
@@ -73,7 +82,7 @@ python3 delivery/existing_entry.py --cli /absolute/path/wecom-cli --node /absolu
 
 1. 关闭权限页，回到同一 Bot 详情，使用“去使用”“发消息”或客户端等价的单聊入口（若第2步已由该资料页进入并完成身份核验，则复用这个会话），建立**本机当前账号与这个 Bot 的私聊**。不通过建群完成，不用文件传输助手、其他人的私聊或另一设备的历史代替。
 2. 安装 Agent 核对进入路径与聊天类型。仅名称匹配不证明是私聊；不要在同名群里发送链接。无法从已核验详情进入时先修正该步骤。
-3. 根据已核验的 CLI Bot ID、官方授权 URL、业务权限和组织，用 `onboard.py --input <私有输入.json> --output <私有配置.json>` 生成草稿。输入增加可选 `organization_selector_name`，填写刚刚实际读到的原生菜单名；`organization_name` 保留业务企业名称。此时返回 `entry_preparation_required`，不是安装成功。
+3. 根据已核验的CLI Bot ID、官方URL、权限和组织，用`onboard.py --input <私有输入.json> --selection <成功的selection.json> --output <私有配置.json>`生成草稿。`organization_selector_name`填写真实原生菜单名，`organization_name`保留业务企业名称。缺少明确选择记录返回`target_selection_required`；输入的Bot、profile或组织偏离选择记录返回`requested_target_mismatch`，不写配置。成功返回`entry_preparation_required`，不是安装成功。
 4. 生成准备发送的文本（只落盘，不发送）：
 
 ```bash

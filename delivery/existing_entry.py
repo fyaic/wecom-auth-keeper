@@ -14,7 +14,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
-from keeper_bootstrap import authorization_identity
+from keeper_bootstrap import authorization_identity, validate_target_selection
 from keeper_common import cli_environment, executable
 
 
@@ -69,6 +69,8 @@ def inspect_existing(cfg, output, *, run=subprocess.run):
                 raise ValueError('existing_bot_identity_unavailable')
             return ids[0]
         bot_id = bound_bot()
+        if cfg.get('expected_bot_id') is not None and bot_id != cfg['expected_bot_id']:
+            raise ValueError('requested_target_mismatch')
         identity = json.loads(call(['identity', 'whoami']).stdout)
         result = call(['message', 'aibot', 'sessions', 'list'], allow_error=True)
         response = json.loads(result.stdout)
@@ -99,21 +101,28 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--cli', default='wecom-cli')
     p.add_argument('--node', help='Absolute Node path for the npm CLI launcher')
-    p.add_argument('--profile', help='Existing absolute CLI profile; omitted means the CLI default')
+    p.add_argument('--profile', help='Optional cross-check; omitted uses the selection record, not the CLI default')
+    p.add_argument('--selection', required=True, help='Successful private select_target.py result')
     p.add_argument('--output', required=True)
     args = p.parse_args()
     try:
         cfg = {'wecom_cli': executable(args.cli, 'wecom-cli')}
+        selection = json.loads(Path(args.selection).read_text())
+        validate_target_selection(selection)
+        if args.profile is not None and args.profile != selection['cli_config_dir']:
+            raise ValueError('requested_target_mismatch')
+        cfg['expected_bot_id'] = selection['cli_bot_id']
         if args.node:
             cfg['wecom_node'] = executable(args.node, 'node')
-        if args.profile:
-            cfg['cli_config_dir'] = args.profile
+        if selection['cli_config_dir'] is not None:
+            cfg['cli_config_dir'] = selection['cli_config_dir']
         result = inspect_existing(cfg, args.output)
     except Exception as exc:
         known = {'private_report_must_be_outside_release', 'profile_must_be_absolute',
                  'existing_cli_unavailable', 'unsupported_cli_version', 'profile_isolation_requires_version_validation',
                  'existing_profile_not_authorized', 'existing_bot_identity_unavailable', 'invalid_cli_response',
-                 'cli_profile_changed', 'cli_bot_identity_mismatch', 'official_authorization_url_unavailable'}
+                 'cli_profile_changed', 'cli_bot_identity_mismatch', 'official_authorization_url_unavailable',
+                 'target_selection_required', 'requested_target_mismatch'}
         result = {'ok': False, 'error': str(exc) if type(exc) is ValueError and str(exc) in known else 'existing_entry_inspection_failed',
                   'binding_changed': False, 'renewal_verified': False}
     print(json.dumps(result, ensure_ascii=False))

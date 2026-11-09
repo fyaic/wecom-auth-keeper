@@ -9,6 +9,43 @@ from urllib.parse import urlencode, urlsplit, parse_qs
 ENTRY_MARKER = '【自动续期入口】'
 
 
+def validate_target_selection(selection):
+    """Reject incomplete/ambiguous installer records before using a profile."""
+    if (not isinstance(selection, dict) or selection.get('schema_version') != 1
+            or selection.get('ok') is not True or selection.get('status') != 'target_profile_selected'
+            or selection.get('matching_profile_count') != 1
+            or selection.get('requested_target_changed') is not False
+            or 'cli_config_dir' not in selection):
+        raise ValueError('target_selection_required')
+    if (selection.get('selection_source') not in {'user_request', 'business_service'}
+            or selection.get('identity_source') != 'native_selected_bot_permission_page'):
+        raise ValueError('target_selection_required')
+    profile = selection['cli_config_dir']
+    if profile is not None and (not isinstance(profile, str) or not profile.strip() or not Path(profile).is_absolute()):
+        raise ValueError('target_selection_required')
+    if any(not isinstance(selection.get(k), str) or not selection[k].strip()
+           for k in ('bot_chat_name', 'organization_selector_name')):
+        raise ValueError('target_selection_required')
+    try:
+        identity = authorization_identity(selection.get('authorization_url'))
+    except ValueError:
+        raise ValueError('target_selection_required') from None
+    if selection.get('authorization_identity') != identity or selection.get('cli_bot_id') != identity['str_aibotid']:
+        raise ValueError('target_selection_required')
+
+
+def require_target_selection(selection, value):
+    """Bind onboarding to explicit user intent, not whichever CLI is default."""
+    validate_target_selection(selection)
+    identity = authorization_identity(value.get('authorization_url'))
+    if (selection.get('authorization_identity') != identity
+            or selection.get('cli_bot_id') != value.get('cli_bot_id')
+            or selection.get('cli_config_dir') != value.get('cli_config_dir')
+            or selection.get('bot_chat_name') != value.get('bot_chat_name')
+            or selection.get('organization_selector_name') != value.get('organization_selector_name')):
+        raise ValueError('requested_target_mismatch')
+
+
 def authorization_identity(value):
     """Validate an official URL without rebuilding its client routing parameters."""
     try:
@@ -36,6 +73,8 @@ def target_binding(cfg):
     # Preserve old receipts for configs without this newly recorded field.
     if 'authorization_url' in cfg:
         values['authorization_url'] = cfg['authorization_url']
+    if 'target_selection' in cfg:
+        values['target_selection'] = cfg['target_selection']
     return hashlib.sha256(json.dumps(values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

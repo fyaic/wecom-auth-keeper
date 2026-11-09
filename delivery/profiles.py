@@ -44,15 +44,23 @@ def inspect_profiles(binary, profiles, output, *, run=subprocess.run):
                 state = 'error'
             entry = {'cli_config_dir': profile, 'status': state, 'desktop_identity_verified': False}
             if state == 'authorized':
+                before = run([binary, 'auth', 'show'], capture_output=True, text=True, timeout=30, env=env)
+                ids = re.findall(r'^Bot ID:\s*(\S+)\s*$', before.stdout, re.M)
                 identity = run([binary, 'identity', 'whoami'], capture_output=True, text=True, timeout=30, env=env)
-                if identity.returncode:
+                after = run([binary, 'auth', 'show'], capture_output=True, text=True, timeout=30, env=env)
+                final_ids = re.findall(r'^Bot ID:\s*(\S+)\s*$', after.stdout, re.M)
+                if before.returncode or after.returncode or len(ids) != 1 or final_ids != ids:
+                    entry['status'] = 'identity_unstable'
+                elif identity.returncode:
                     entry['status'] = 'identity_query_failed'
                 else:
                     # CLI 1.3 uses contextual text in JSON, not a stable bot_id
                     # schema. Keep official evidence for the installation Agent.
                     entry['identity'] = json.loads(identity.stdout)
+                    entry['cli_bot_id'] = ids[0]
             reports.append(entry)
-        json.dump({'schema_version': 1, 'cli_version': match[0], 'profiles': reports,
+        json.dump({'schema_version': 2, 'cli_version': match[0], 'profiles': reports,
+                   'inventory_scope': 'explicit_profiles_only',
                    'target_selected': False, 'renewal_verified': False}, stream, ensure_ascii=False, indent=2)
         stream.write('\n')
     return {'ok': all(r['status'] in ('authorized', 'unauthorized') for r in reports),

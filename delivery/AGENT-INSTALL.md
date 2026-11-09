@@ -24,7 +24,7 @@ python3 -m venv .venv
 
 检查 `wecom-cli --version`（至少1.1.0）；没有 CLI 时先检查 Node/npm，并按官方 `@wecom/cli` 包完成安装，再复查版本与 `auth show --status`。已有可用 CLI 不默认升级，不重复初始化已授权 profile。自定义 profile 的隔离行为目前验过1.3.0，其他版本先验证，不把一套凭据误当多个 profile。
 
-已有绑定优先运行 `delivery/existing_entry.py`：按业务服务实际使用的 profile，通过只读 CLI 获取官方身份、过期证据和完整原始续期链接。详见 FIRST-RUN.md 第1步。`850003` 是权限过期，不能据此新建 profile、换 Bot 或要求扫码；桌面暂未找到 Bot 也不能触发初始化。原链接直接传给 onboard，不删除或改写客户端路由参数。
+**用户指定的Bot优先于业务服务profile和终端默认值。** 先用profiles盘点已知配置，再从指定Bot的原生详情取得官方身份，以select_target生成匹配记录；仅成功选择后才用`existing_entry.py --selection ...`读取该profile的原始链接。默认CLI即使authorized也不能改变目标。`850003`是权限过期；其他Bot的创建者拒绝也不能用于判断指定Bot或整台设备。详见FIRST-RUN.md。
 
 不复用其他业务服务的依赖环境。若本机已有经系统授权的专用执行 Python，可在私有配置中明确填写其绝对路径，并如实记录复用；验收与正式任务必须使用同一个执行主体，不能把这种复测说成从空设备全新安装。
 
@@ -32,7 +32,7 @@ python3 -m venv .venv
 
 ## 1. 完成首次接入，不直接搜索不存在的历史
 
-顺序固定：**目标企业与业务能力 → 选定/接入 Bot 与 CLI profile → 原生组织核验 → Bot 官方身份核验（必要时先进入候选空私聊只读定位）→ 确认本机 Bot 私聊 → 发送或复用一次入口 → 离开会话后的后台找回。** 详细动作及失败回退见 FIRST-RUN.md。
+顺序固定：**用户指定目标/组织/能力 → 盘点既有profile候选 → 指定Bot的原生组织与官方身份 → 按ID匹配profile → 该目标的创建者核验 → 本机Bot私聊 → 一次入口 → 后台找回。** 无匹配profile时保留指定目标，明确区分“Bot已创建但CLI接入未匹配”；不换成别的已授权Bot，不要求重建目标。详细动作见FIRST-RUN.md。
 
 本机已有 CLI profile 只用官方命令盘点：
 
@@ -45,7 +45,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 若未绑定 Bot，按本机官方帮助完成独立 profile 的接入或创建。首次扫码、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
 
-`onboard.py --input <私有输入.json> --output <新私有配置.json>` 在取得正确官方入口后生成草稿。必填字段：bot_chat_name、organization_name、cli_bot_id、authorization_url、target_rows；可选 cli_config_dir、organization_selector_name、wecom_cli 与 wecom_node（后两者为绝对路径）。生成器会记录当前检测到的 CLI 和 Node 路径；npm 安装的 CLI 即使使用绝对路径，也可能通过 `/usr/bin/env node` 启动，因此后台调用会加入已记录的运行目录。未检测到时补充实际路径，并在 GUI launchd 中复验身份，不能以终端成功代替。target_rows 是用户需要维护的明确权限白名单，消息、文档、微盘、邮件等可多选，不因验收方便自动加权。organization_name 是业务企业名，organization_selector_name 是本机原生菜单实际名称，不能猜或用头像推断。
+`onboard.py --input <私有输入.json> --selection <成功选择记录.json> --output <新私有配置.json>`生成草稿。必填输入：bot_chat_name、organization_name、organization_selector_name、cli_bot_id、authorization_url、target_rows；可选cli_config_dir、wecom_cli、wecom_node。Bot身份、名称、原生组织、profile必须与选择记录一致，否则不写配置；旧部署配置不自动迁移。CLI/Node绝对路径用于后台精简PATH，在GUI launchd中复验。target_rows是用户明确需要的权限白名单，不因验收加权；organization_name保留业务企业名，organization_selector_name必须是本机实际菜单名。
 
 草稿返回 `entry_preparation_required`，包含 entry_receipt 路径。`prepare_entry.py` 只生成准备发送的文本，sent=false 不代表已经发消息。安装 Agent 必须从已核验 Bot 详情进入正确私聊；首次没有会话不能仅重跑全局/历史搜索。收到发送授权后只发一次，然后本机读回核验。不默认使用群聊、他人私聊、文件传输助手或另一设备的历史。
 
@@ -67,7 +67,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 | 工具 | 用途及限制 |
 | --- | --- |
-| `existing_entry.py --cli ... --profile ... --output ...` | 复用已有 CLI，通过只读官方调用取得原始续期链接；不初始化、不读凭据、不发送，不能替代组织/私聊核验。 |
+| `select_target.py --target ... --profiles ... --output ...` | 根据用户指定Bot的原生官方身份匹配profile；无匹配或多匹配不自动选择默认项，不改变目标。 |
+| `existing_entry.py --selection ... --cli ... --output ...` | 只读取选择记录指定的profile，调用前重验Bot ID；不初始化、不读凭据、不发送。 |
 | `gui.py --action inspect-expanded --python <绝对Python路径>`（无config） | 首次接入时读取原生组织菜单与可见Bot名称候选，不需要虚构Bot配置；只读、不导航、不授予权限。 |
 | `gui.py --action inspect` | 只读当前原生控件、通讯录 Bot 分组与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。通讯录只报告可见候选数量/位置，不声明列表完整或身份已验证。 |
 | `gui.py --action inspect-expanded` | 临时请求 AXEnhancedUserInterface，读回生效并恢复原值；不是系统辅助功能授权。 |
