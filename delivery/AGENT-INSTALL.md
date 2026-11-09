@@ -20,6 +20,8 @@ python3 -m venv .venv
 .venv/bin/python -m pip install -r requirements-macos.txt
 ```
 
+检查 `wecom-cli --version`（至少1.1.0）；没有 CLI 时先检查 Node/npm，并按官方 `@wecom/cli` 包完成安装，再复查版本与 `auth show --status`。已有可用 CLI 不默认升级，不重复初始化已授权 profile。自定义 profile 的隔离行为目前验过1.3.0，其他版本先验证，不把一套凭据误当多个 profile。
+
 不复用其他业务服务的依赖环境。若本机已有经系统授权的专用执行 Python，可在私有配置中明确填写其绝对路径，并如实记录复用；验收与正式任务必须使用同一个执行主体，不能把这种复测说成从空设备全新安装。
 
 配置、输入、聊天入口文本、诊断和验收记录全部放包外本机私有目录。不要修改本机其他 Bot 的凭据、业务目录或常驻服务；先识别同 Bot 已有任务，避免重复安装。

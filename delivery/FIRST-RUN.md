@@ -6,6 +6,8 @@
 
 ## 1. 先确定本机要维护的 Bot
 
+先读本机业务服务已明确使用的 CLI/profile 路径，再盘点；服务实际指定的 profile 比终端默认值更能说明业务目标。不要为找配置读取 Secret/凭据文件，也不要修改业务服务。
+
 先查已知 CLI profile：`delivery/profiles.py` 只调用官方接口，原始身份存到包外私有文件。正确身份命令是 `wecom-cli identity whoami`，不是 `wecom-cli whoami`。`auth show --status` 的 authorized 只表示 CLI 已绑定，不代表业务权限未过期。
 
 | 设备状态 | Agent 应做什么 |
