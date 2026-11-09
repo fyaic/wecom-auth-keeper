@@ -17,6 +17,8 @@ Installation order:
 2. Verify the Bot's organization using the native enterprise menu and the Bot's
    official identity. “Manage robots” is not the complete list of usable Bots.
    On WeCom 5.0.13, “查看更多机器人” opens the contacts Bot directory.
+   If absent, use “更多 → 通讯录 → 智能机器人”; sidebar positions vary
+   between organizations, and “更多” can be outside the function-row table.
    Use config-free `gui.py --action inspect-expanded --python <absolute-python>`
    with a new private evidence directory before Bot IDs are available; never
    fabricate IDs just to run diagnostics.

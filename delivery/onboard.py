@@ -40,7 +40,7 @@ def configure(value, destination, system=None):
     if not isinstance(value, dict):
         raise ValueError('invalid_input')
     required = {'bot_chat_name', 'authorization_url', 'cli_bot_id', 'target_rows', 'organization_name'}
-    if not required <= set(value) or set(value) - required - {'cli_config_dir', 'organization_selector_name', 'wecom_cli'}:
+    if not required <= set(value) or set(value) - required - {'cli_config_dir', 'organization_selector_name', 'wecom_cli', 'wecom_node'}:
         raise ValueError('invalid_input_fields')
     profile = value.get('cli_config_dir')
     if profile is not None and (not isinstance(profile, str) or not profile.strip() or not Path(profile).is_absolute()):
@@ -49,9 +49,15 @@ def configure(value, destination, system=None):
     if selector is not None and (not isinstance(selector, str) or not selector.strip()
                                  or selector.startswith('<') or '\n' in selector):
         raise ValueError('missing_identity_or_organization')
-    binary = value.get('wecom_cli') or shutil.which('wecom-cli')
-    if binary is not None and (not isinstance(binary, str) or not Path(binary).is_absolute()):
-        raise ValueError('invalid_cli_executable')
+    runtime = {}
+    for key, name in [('wecom_cli', 'wecom-cli'), ('wecom_node', 'node')]:
+        binary = value[key] if key in value else shutil.which(name)
+        if binary is not None and (not isinstance(binary, str) or not binary.strip() or not Path(binary).is_absolute()):
+            raise ValueError('invalid_cli_executable')
+        if key in value and binary is None:
+            raise ValueError('invalid_cli_executable')
+        if binary:
+            runtime[key] = binary
     for key in required - {'target_rows'}:
         if not isinstance(value[key], str) or not value[key].strip() or value[key].startswith('<') or '\n' in value[key]:
             raise ValueError('missing_identity_or_organization')
@@ -84,9 +90,8 @@ def configure(value, destination, system=None):
                            'min_renew_interval_seconds': 3600, 'retry_seconds': 300, 'close_window': True}}
     if profile is not None:
         cfg['cli_config_dir'] = profile
-    if binary:
-        # GUI launchd does not inherit the Agent terminal's Homebrew PATH.
-        cfg['wecom_cli'] = binary
+    # GUI launchd needs both the CLI launcher and its Node runtime.
+    cfg.update(runtime)
     # Preserve declared business intent without enabling unverified navigation.
     cfg['expected_organization'] = value['organization_name']
     if selector is not None:

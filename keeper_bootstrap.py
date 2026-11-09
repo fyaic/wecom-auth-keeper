@@ -12,7 +12,7 @@ ENTRY_MARKER = '【自动续期入口】'
 def target_binding(cfg):
     values = {key: cfg.get(key) for key in (
         'aibotid', 'str_aibotid', 'bot_chat_name', 'cli_config_dir',
-        'organization_selector_name', 'organization_navigation', 'target_rows', 'venv_python', 'wecom_cli')}
+        'organization_selector_name', 'organization_navigation', 'target_rows', 'venv_python', 'wecom_cli', 'wecom_node')}
     return hashlib.sha256(json.dumps(values, sort_keys=True, ensure_ascii=False).encode()).hexdigest()
 
 

@@ -41,7 +41,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 若未绑定 Bot，按本机官方帮助完成独立 profile 的接入或创建。首次扫码、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
 
-`onboard.py --input <私有输入.json> --output <新私有配置.json>` 在取得正确官方入口后生成草稿。必填字段：bot_chat_name、organization_name、cli_bot_id、authorization_url、target_rows；可选 cli_config_dir、organization_selector_name 与 wecom_cli（绝对路径）。生成器会记录当前检测到的 CLI 绝对路径，GUI launchd 不依赖 Agent 终端的 PATH；未检测到时在配置中补充实际路径。target_rows 是用户需要维护的明确权限白名单，消息、文档、微盘、邮件等可多选，不因验收方便自动加权。organization_name 是业务企业名，organization_selector_name 是本机原生菜单实际名称，不能猜或用头像推断。
+`onboard.py --input <私有输入.json> --output <新私有配置.json>` 在取得正确官方入口后生成草稿。必填字段：bot_chat_name、organization_name、cli_bot_id、authorization_url、target_rows；可选 cli_config_dir、organization_selector_name、wecom_cli 与 wecom_node（后两者为绝对路径）。生成器会记录当前检测到的 CLI 和 Node 路径；npm 安装的 CLI 即使使用绝对路径，也可能通过 `/usr/bin/env node` 启动，因此后台调用会加入已记录的运行目录。未检测到时补充实际路径，并在 GUI launchd 中复验身份，不能以终端成功代替。target_rows 是用户需要维护的明确权限白名单，消息、文档、微盘、邮件等可多选，不因验收方便自动加权。organization_name 是业务企业名，organization_selector_name 是本机原生菜单实际名称，不能猜或用头像推断。
 
 草稿返回 `entry_preparation_required`，包含 entry_receipt 路径。`prepare_entry.py` 只生成准备发送的文本，sent=false 不代表已经发消息。安装 Agent 必须从已核验 Bot 详情进入正确私聊；首次没有会话不能仅重跑全局/历史搜索。收到发送授权后只发一次，然后本机读回核验。不默认使用群聊、他人私聊、文件传输助手或另一设备的历史。
 
@@ -55,7 +55,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 这是实际 GUI launchd 一次性任务，使用配置中的 Python，完成后卸载；不是每小时服务。成功表示所选 CLI、原生组织、目标聊天标题、链接双 ID、官方页面、全部配置权限可读与关页均通过。它不会发送、授权或改变 Bridge。私聊类型由安装 Agent 从已核验详情的进入路径确认，脚本不会把同名聊天当作类型证据。entry_receipt 是设备与配置绑定的本地安装记录，不是防篡改安全证明，也不是续期成功证明。
 
-入口未准备好时维护/定时任务生成返回 bootstrap_incomplete；修好本步骤再继续。换目标、profile、组织、权限范围或执行 Python 路径后重新验证；不要删掉 entry_receipt 配置来绕过。已有旧配置保持原行为，不在正在运行的服务上强制迁移。
+入口未准备好时维护/定时任务生成返回 bootstrap_incomplete；修好本步骤再继续。换目标、profile、组织、权限范围或 Python/CLI/Node 路径后重新验证；不要删掉 entry_receipt 配置来绕过。已有旧配置保持原行为，不在正在运行的服务上强制迁移。
 
 | 工具 | 用途及限制 |
 | --- | --- |

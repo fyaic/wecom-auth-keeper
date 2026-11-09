@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -7,7 +8,7 @@ from unittest.mock import Mock, patch
 
 import maintain
 from keeper_bootstrap import device_binding, entry_message, entry_status, require_entry, target_binding
-from keeper_common import KeeperError, atomic_json
+from keeper_common import KeeperError, atomic_json, cli_environment
 from test_delivery import module
 from test_keeper import Fixture
 
@@ -48,6 +49,7 @@ class BootstrapTests(Fixture):
                              ('organization_selector_name', 'Enterprise C'), ('target_rows', ['发送消息']),
                              ('venv_python', '/another/python'), ('bot_chat_name', 'renamed')]:
             self.assertFalse(entry_status({**self.cfg, field:value})['ok'])
+        self.assertFalse(entry_status({**self.cfg,'wecom_node':'/another/bin/node'})['ok'])
         with patch('keeper_bootstrap.device_binding', return_value='other-device'):
             self.assertFalse(entry_status(self.cfg)['ok'])
         for field in ('cleanup_verified', 'cold_start_verified', 'cli_identity_verified'):
@@ -160,10 +162,26 @@ class BootstrapTests(Fixture):
                'cli_bot_id':'fixture','authorization_url':'https://work.weixin.qq.com/ai/aiHelper/authorizationList?aibotid=123&str_aibotid=fixture',
                'target_rows':['发送消息']}
         path=self.root/'new.json'
-        with patch.object(onboard.shutil,'which',return_value='/opt/homebrew/bin/wecom-cli'):
+        with patch.object(onboard.shutil,'which',side_effect=lambda name:'/opt/homebrew/bin/'+name):
             result=onboard.configure(value,path,'Darwin')
         self.assertEqual(result['status'],'entry_preparation_required')
         cfg=json.loads(path.read_text())
         self.assertEqual(cfg['wecom_cli'],'/opt/homebrew/bin/wecom-cli')
+        self.assertEqual(cfg['wecom_node'],'/opt/homebrew/bin/node')
         self.assertNotIn('organization_navigation',cfg)
         self.assertFalse(entry_status(cfg)['ok'])
+
+    def test_cli_env_launcher_finds_pinned_node_under_launchd_minimal_path(self):
+        runtime=self.root/'node-runtime';runtime.mkdir()
+        fake_node=runtime/'node';fake_node.write_text("#!/bin/sh\nprintf '%s' runtime-ok\n")
+        fake_node.chmod(0o700)
+        cli=self.root/'npm-prefix'/'wecom-cli';cli.parent.mkdir()
+        cli.write_text('#!/usr/bin/env node\n');cli.chmod(0o700)
+        cfg={'wecom_cli':str(cli),'wecom_node':str(fake_node),'cli_config_dir':'/chosen/profile'}
+        with patch.dict(os.environ,{'PATH':'/usr/bin:/bin','WECOM_CLI_CONFIG_DIR':'/wrong/profile'}):
+            failure=subprocess.run([str(cli)],capture_output=True)
+            self.assertNotEqual(failure.returncode,0)
+            success=subprocess.run([str(cli)],env=cli_environment(cfg),capture_output=True,text=True)
+        self.assertEqual(success.returncode,0)
+        self.assertEqual(success.stdout,'runtime-ok')
+        self.assertEqual(cli_environment(cfg)['WECOM_CLI_CONFIG_DIR'],'/chosen/profile')

@@ -53,9 +53,11 @@ def load_config(path, *, probes=False):
         value = cfg.setdefault(key, default)
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or not 0 < value <= 600:
             raise KeeperError("invalid_config", f"{key} must be between 0 and 600 seconds", 3)
-    for key in ("bridge_url", "notify_to", "wecom_cli", "venv_python"):
+    for key in ("bridge_url", "notify_to", "wecom_cli", "wecom_node", "venv_python"):
         if key in cfg and not isinstance(cfg[key], str):
             raise KeeperError("invalid_config", f"{key} must be a string", 3)
+    if 'wecom_node' in cfg and (not cfg['wecom_node'].strip() or not Path(cfg['wecom_node']).is_absolute()):
+        raise KeeperError('invalid_config', 'wecom_node must be an absolute executable path', 3)
     if "cli_config_dir" in cfg:
         value = cfg["cli_config_dir"]
         if not isinstance(value, str) or not Path(value).is_absolute() or not value.strip():
@@ -108,6 +110,13 @@ def cli_environment(cfg):
     env.pop("WECOM_CLI_CONFIG_DIR", None)
     if cfg.get("cli_config_dir"):
         env["WECOM_CLI_CONFIG_DIR"] = cfg["cli_config_dir"]
+    # npm's CLI launcher can use /usr/bin/env node even when the launcher path
+    # is absolute. launchd does not inherit the installing terminal's PATH.
+    directories = [str(Path(cfg[key]).parent) for key in ('wecom_node', 'wecom_cli')
+                   if isinstance(cfg.get(key), str) and Path(cfg[key]).is_absolute()]
+    if directories:
+        env['PATH'] = os.pathsep.join(dict.fromkeys([
+            *directories, *env.get('PATH', os.defpath).split(os.pathsep)]))
     return env
 
 
