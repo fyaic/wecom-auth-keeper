@@ -63,6 +63,8 @@ python3 delivery/existing_entry.py --cli /absolute/path/wecom-cli --node /absolu
 
 官方页出现“暂无法授权，仅限机器人创建者可进行授权”时，脚本返回 `authorization_creator_required`；“当前账号非机器人所属企业”对应 `authorization_organization_mismatch`；“机器人已删除”对应 `authorization_bot_deleted`。这三项与过期、导航失败分别处理。先核对原生组织选中项，在已有业务目标范围内有界验证正确组织；仍受限时，保留 CLI，由 Bot 创建者使用具备权限的桌面身份/设备完成安装。**不通过换绑、扫码新建 profile、点击其他 Bot 或修改客户端权限来绕过官方身份限制。** 未实测的组织保留 unknown，不能仅凭昵称判定账号不符。
 
+如果错误页显示创建者姓名，可从该**已绑定页面内唯一可核验的资料入口**只读查看创建者组织/部门线索；姓名可能是分段AXStaticText并带AXPress，不能因整句不同漏掉限制。只读所需身份线索，不点“发消息/添加联系人/编辑”，关闭本轮资料浮层和权限页并确认主窗口保留。组织名称或部门路径只是定位线索，不能冒充企业ID匹配。CLI绑定证明API身份，桌面登录态证明UI身份；两者必须具备对应权限。已有其他桌面服务时，不擅自切换登录账号来通过测试。
+
 `inspect-expanded` 可只读报告当前官方页的 `blocking_error`，无配置时不能证明它属于选定 CLI。具有正确配置时的 `check-existing`/入口核验/维护都会检查绑定页错误；入口核验失败仍自动关页，不写成功回执。诊断结束后，回到已核验 Bot 私聊准备正式入口，再单独验续期与定时。
 
 ## 3. 从已核验 Bot 建立私聊，准备一次入口
