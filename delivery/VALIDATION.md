@@ -129,3 +129,13 @@ Kimi 后续单次状态感知原型从消息页自主进入详情及官方权限
 随后现场确认：“查看更多机器人”跳到通讯录“智能机器人”分组，实际结构为 AXOutline → AXRow，Bot 名称在 AXTextArea，并有 icon bot 图标；不是管理页 AXGroup 卡片。上一版临时探针把 unknown 列为等待成功条件，因此其“等了12秒仍无卡片”的描述无效，不作为 Bot 不存在的证据。标准说明已分开通讯录、管理列表、资料页与权限页；诊断新增 contacts_bot_directory，仅输出可见行数和配置名称候选的几何，不输出联系人名称、不宣称列表完整或身份已验证。远端实际快照离线回放识别 3 个可见 Bot 和 1 个配置名称候选，通过；这项证据不是实时导航成功。
 
 本机官方 CLI 校验另实测两份历史配置被 bootstrap_cli_identity_mismatch 拒绝：当前默认 CLI 已属于另一 Bot。没有换绑、改凭据或修改现有续期服务；结果证明不能用默认 CLI authorized 代替目标绑定检查。新诊断回归后共 177 项测试通过，无跳过，仓库检查通过。远端完整首次接入、真实续期和自然定时触发仍需分别核验。
+
+
+首次诊断进一步解除对 Bot 配置的依赖：无配置模式使用独立原生树读取器，不构造虚假 Bot ID，也不解析任何目标授权行。GUI runner 只允许无配置 inspect/inspect-expanded，并要求执行 Python 的绝对路径；其余动作拒绝，已有配置不允许用该参数换执行主体。测试覆盖这些边界及只返回通讯录 Bot 名称、不返回普通联系人或原始 URL/ID。首次资料入口如需先开空私聊，可只读进入候选会话再核验身份；发送与授权仍须在身份/组织匹配后执行。
+
+
+本机无配置诊断实测：使用既有获权的独立执行 Python，在 Documents 下新建日志目录时 launchd 返回 `78: EX_CONFIG`，无JSON；相同解释器/脚本改用 `~/.config/wecom-auth-keeper-validation-20261109/native-only-1` 后真实 GUI launchd 退出0，target_configured=false、navigation_performed=false、authorization_changed=false，读到1个窗口。AX展开原值false恢复为false，临时job确认卸载。该对照表明启动与日志路径相关，未从系统日志证明具体TCC原因；不据此调整系统权限。此次没有发消息或续期。
+
+修复 runner 对 `78: EX_CONFIG` 等带说明退出码的解析，任务失败立即报告实际退出码，不再等到超时；非零退出且没有JSON单独报 gui_job_failed。移除临时任务不必要的工作目录要求（所有程序/配置路径均为绝对路径）。诊断查找WebArea时跳过聊天列表、通讯录和无关网页正文，避免遍历与目标无关的大树。
+
+上述无配置入口、原生诊断剪枝和launchd失败解析合并后，180项回归全部通过，无跳过；仓库检查通过。首次接入诊断成功不等于Bot绑定、真实续期或定时验收完成。

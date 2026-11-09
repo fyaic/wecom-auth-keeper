@@ -16,6 +16,7 @@
 - Record the installer’s private-chat provenance separately from machine-verified chat title/link/navigation; keep first grants, real renewal and scheduled execution as distinct acceptance stages.
 - Harden authorization actions to live controls inside the bound page, with no mouse fallback. Allow passive existing-page inspection and bound page cleanup without changing legacy Bridge.
 - Recognize the native contacts Bot directory reached by “查看更多机器人”: AXOutline rows and Bot badges, distinct from management cards. Report visible candidates without exposing contact names or claiming full enumeration/identity verification.
+- Allow native-only GUI inspection before Bot configuration exists, using an explicit execution Python; it lists visible Bot candidates without permitting renewal, messages or grants. Permit empty candidate-chat navigation when needed to inspect identity, while keeping identity verification before sending.
 - These are internal preview changes. The new first-run flow and remote unattended renewal still require live acceptance; unit tests do not establish business release readiness.
 
 ### Remote acceptance fixes — 2026-11-06

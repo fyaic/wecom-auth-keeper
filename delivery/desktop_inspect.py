@@ -18,6 +18,14 @@ from keeper_navigation import sidebar_rows
 from keeper_organization import menu_rows
 from renew import Renewal, target_url
 
+
+class NativeInspection:
+    """Tree readers without a fabricated Bot identity or permission-row parser."""
+    walk, text, contains = Renewal.walk, Renewal.text, Renewal.contains
+
+    def __init__(self, ax):
+        self.ax, self.app = ax, None
+
 NATIVE_LABELS = {'消息', '机器人', '智能机器人', '管理机器人', '我的机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
                  '查找聊天记录', '关闭聊天记录', '查看更多机器人', '机器人资料', '发消息'}
 PERMISSION_LABELS = {'授权', '已授权', '取消授权', '确认', '确定', '同意', '重新授权'}
@@ -59,7 +67,7 @@ def official_page(value):
 
 
 def inspect_desktop(cfg, ax, *, expand=False):
-    engine = Renewal(cfg, ax)
+    engine = Renewal(cfg, ax) if cfg is not None else NativeInspection(ax)
     native, engine.app = ax.application()
     with exposed_tree(ax, engine.app) if expand else nullcontext(None) as exposure:
         result = snapshot(engine, native, cfg, ax)
@@ -86,8 +94,9 @@ def native_controls(engine, root):
 def bot_directory(engine, window, cfg):
     """Recognize the 5.0.13 contacts landing page, not management cards.
 
-    Only fixed native icon/heading pairs qualify an outline. Return counts and
-    candidate geometry, never names or other contact text. Visible rows cannot
+    Only fixed native icon/heading pairs qualify an outline. Configured checks
+    return counts/geometry; initial setup also returns the Bot display names,
+    never other contacts. Visible rows cannot
     establish a complete directory, Bot identity, organization or private chat.
     """
     ax = engine.ax
@@ -120,16 +129,39 @@ def bot_directory(engine, window, cfg):
             if not engine.contains(ax.frame(outline), bounds):
                 continue
             count += 1
-            if names == [cfg['bot_chat_name']]:
-                candidates.append({'bounds': bounds, 'actions': ax.action_names(row)})
+            if cfg is None or names == [cfg['bot_chat_name']]:
+                candidate = {'bounds': bounds, 'actions': ax.action_names(row)}
+                if cfg is None:
+                    candidate['display_name'] = names[0]
+                candidates.append(candidate)
         directories.append({'kind': 'contacts_bot_directory', 'bounds': ax.frame(outline),
-                            'visible_bot_rows': count, 'configured_name_candidates': candidates,
+                            'visible_bot_rows': count,
+                            'bot_candidates' if cfg is None else 'configured_name_candidates': candidates,
                             'list_complete': False, 'target_identity_verified': False})
     return directories
 
 
+def web_pages(engine, root):
+    """Find page roots without walking chat history or a loaded web document."""
+    stack, total = [(root, 0)], 0
+    while stack:
+        node, depth = stack.pop()
+        total += 1
+        if total > 5000 or depth > 40:
+            from keeper_common import KeeperError
+            raise KeeperError('tree_incomplete', 'Page inspection tree exceeds limits')
+        role = engine.ax.ax_get(node, 'AXRole')
+        if role == 'AXWebArea':
+            yield node
+            continue
+        if role in {'AXTable', 'AXOutline', 'AXTextArea'}:
+            continue
+        stack.extend((c, depth + 1) for c in engine.ax.ax_get(node, 'AXChildren') or [])
+
+
 def snapshot(engine, native, cfg, ax):
     result = {'ok': True, 'mode': 'desktop-inspection', 'renewal_verified': False,
+              'target_configured': cfg is not None,
               'navigation_performed': False, 'authorization_changed': False,
               'client_version': ax.client_version(native), 'windows': [],
               'visible_organization_menu': [{'name': r[0], 'selected': r[1]} for r in menu_rows(engine)]}
@@ -143,14 +175,12 @@ def snapshot(engine, native, cfg, ax):
             for match in native_labels(ax, node):
                 entry['native_controls'].append({**match, 'role': ax.ax_get(node, 'AXRole'),
                                                 'bounds': ax.frame(node), 'actions': ax.action_names(node)})
-        for node in engine.walk(window):
-            if ax.ax_get(node, 'AXRole') != 'AXWebArea':
-                continue
+        for node in web_pages(engine, window):
             values = [ax.ax_get(node, k) for k in ('AXURL', 'AXValue', 'AXTitle')]
             values = [v for v in values if official_page(v)]
             if not values:
                 continue
-            page = {'matches_configured_bot': any(target_url(v, cfg) for v in values),
+            page = {'matches_configured_bot': cfg is not None and any(target_url(v, cfg) for v in values),
                     'bounds': ax.frame(node), 'permission_controls': []}
             entry['official_permission_pages'].append(page)
             for control in engine.walk(node):
@@ -168,12 +198,12 @@ def snapshot(engine, native, cfg, ax):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--config', required=True)
+    p.add_argument('--config', help='Omit for initial native-only inspection before Bot IDs are known')
     p.add_argument('--expose-native-tree', action='store_true',
                    help='Temporarily expand the advertised native AX tree, then restore its original flag')
     args = p.parse_args()
     try:
-        cfg = load_config(args.config)
+        cfg = load_config(args.config) if args.config else None
         import keeper_ax as ax
         result = inspect_desktop(cfg, ax, expand=args.expose_native_tree)
         code = 0

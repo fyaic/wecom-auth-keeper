@@ -42,6 +42,19 @@ class DesktopInspectionTests(Fixture):
         self.assertNotIn('target_rows', page)
         self.assertNotIn('other-private-id', json.dumps(page))
 
+    def test_page_lookup_does_not_walk_chat_history_or_unrelated_web_content(self):
+        ax=self.adapter()
+        trap=node('AXGroup', 'private loaded content')
+        unrelated=node('AXWebArea', children=[trap],AXURL='https://example.com/')
+        ax.window['AXChildren'] += [unrelated,node('AXTable',children=[trap])]
+        get=ax.ax_get
+        def guarded(n,k):
+            if n is trap:raise AssertionError('must not traverse chat/document bodies')
+            return get(n,k)
+        ax.ax_get=guarded
+        result=inspection.inspect_desktop(None,ax)
+        self.assertEqual(len(result['windows'][0]['official_permission_pages']),1)
+
     def test_expanded_snapshot_restores_flag_and_reads_native_robot_landmarks(self):
         ax = self.adapter()
         exposure = ExposureAdapter()
@@ -106,6 +119,14 @@ class DesktopInspectionTests(Fixture):
         encoded=json.dumps(directory)
         self.assertNotIn('private',encoded)
         self.assertNotIn(self.cfg['bot_chat_name'],encoded)
+        initial = inspection.inspect_desktop(None, ax)
+        self.assertFalse(initial['target_configured'])
+        listing = initial['windows'][0]['bot_directories'][0]
+        self.assertEqual([b['display_name'] for b in listing['bot_candidates']],
+                         [self.cfg['bot_chat_name'],'private other Bot'])
+        self.assertNotIn('private organization',json.dumps(initial))
+        self.assertNotIn('target_rows',initial['windows'][0]['official_permission_pages'][0])
+        self.assertFalse(initial['windows'][0]['official_permission_pages'][0]['matches_configured_bot'])
         # A page can mention the same heading/name without being a directory.
         outline['AXRole']='AXTable'
         self.assertEqual(inspection.inspect_desktop(self.cfg,ax)['windows'][0]['bot_directories'],[])

@@ -27,15 +27,34 @@ def command(action, python, config):
                'inspect': ('delivery/desktop_inspect.py', None),
                'inspect-expanded': ('delivery/desktop_inspect.py', '--expose-native-tree')}
     entry, flag = entries[action]
-    return ([python, str(ROOT / entry), '--config', str(config)] + ([flag] if flag else [])
+    return ([python, str(ROOT / entry)] + (['--config', str(config)] if config is not None else [])
+            + ([flag] if flag else [])
             + (['--existing-window'] if action == 'check-existing' else []))
 
 
-def run_once(action, config, evidence):
+def finished_exit(state):
+    if re.search(r'^\s*pid = \d+\s*$', state, re.M):
+        return None
+    # launchd annotates sysexits, e.g. "78: EX_CONFIG". Ignoring that suffix
+    # previously turned an immediate startup failure into a misleading timeout.
+    match = re.search(r'^\s*last exit code = (-?\d+)(?:[ \t]*:[^\n]*)?\s*$', state, re.M)
+    return int(match[1]) if match else None
+
+
+def run_once(action, config, evidence, *, inspection_python=None):
     if sys.platform != 'darwin':
         raise ValueError('unsupported_automation_backend')
     from keeper_common import executable, load_config
-    cfg = load_config(config)
+    if config is None:
+        if action not in ('inspect', 'inspect-expanded'):
+            raise ValueError('target_config_required')
+        if not isinstance(inspection_python, str) or not Path(inspection_python).is_absolute():
+            raise ValueError('inspection_python_required')
+        cfg = {'venv_python': inspection_python, 'renew_timeout': 60, '_config_path': None}
+    else:
+        if inspection_python is not None:
+            raise ValueError('inspection_python_conflicts_with_config')
+        cfg = load_config(config)
     if os.stat('/dev/console').st_uid != os.getuid():
         raise ValueError('console_user_mismatch')
     evidence = Path(evidence).expanduser().resolve()
@@ -51,7 +70,9 @@ def run_once(action, config, evidence):
     for path in (stdout, stderr):
         path.touch(mode=0o600)
     data = {'Label': label, 'RunAtLoad': True, 'ProgramArguments': command(action, python, cfg['_config_path']),
-            'WorkingDirectory': str(ROOT), 'StandardOutPath': str(stdout), 'StandardErrorPath': str(stderr)}
+            'StandardOutPath': str(stdout), 'StandardErrorPath': str(stderr)}
+    # All program/config paths are absolute. Do not require launchd to chdir
+    # into the extraction directory before it can even start the interpreter.
     with plist.open('xb') as f:
         plist.chmod(0o600)
         plistlib.dump(data, f)
@@ -64,14 +85,18 @@ def run_once(action, config, evidence):
             state = subprocess.run(['launchctl', 'print', domain + '/' + label], capture_output=True, text=True)
             if state.returncode:
                 raise ValueError('temporary_job_disappeared')
-            exit_code = re.search(r'^\s*last exit code = (\d+)\s*$', state.stdout, re.M)
-            running = re.search(r'^\s*pid = \d+\s*$', state.stdout, re.M)
-            if exit_code and not running:
+            code = finished_exit(state.stdout)
+            if code is not None:
                 try:
                     result = json.loads(stdout.read_text())
                 except ValueError:
-                    raise ValueError('invalid_gui_result') from None
-                code = int(exit_code[1])
+                    if code == 0:
+                        raise ValueError('invalid_gui_result') from None
+                    result = {'ok': False, 'error': 'gui_job_failed',
+                              'detail': 'process_exited_without_json'}
+                    if code == 78:
+                        result['startup_hint'] = ('Check the interpreter and log-directory access; '
+                                                  'prefer a private runtime directory under ~/.local/state')
                 return {'ok': code == 0 and result.get('ok') is True, 'action': action,
                         'launchd_exit_code': code, 'result': result, 'evidence_directory': str(evidence)}
             time.sleep(1)
@@ -85,12 +110,15 @@ def run_once(action, config, evidence):
 
 def main():
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--config', required=True)
+    p.add_argument('--config', help='Required except for initial native-only inspection')
+    p.add_argument('--python', dest='inspection_python',
+                   help='Absolute execution Python for config-free inspect/inspect-expanded only')
     p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'entry-verify', 'check', 'check-existing', 'close', 'maintain'], required=True)
     p.add_argument('--evidence-dir', required=True, help='New private directory outside the release')
     args = p.parse_args()
     try:
-        result = run_once(args.action, args.config, args.evidence_dir)
+        result = run_once(args.action, args.config, args.evidence_dir,
+                          inspection_python=args.inspection_python)
     except Exception as exc:
         result = {'ok': False, 'error': 'gui_acceptance_failed'}
         if sys.platform == 'darwin':
@@ -98,7 +126,8 @@ def main():
             result, _ = emit_error(exc)
         known = {'unsupported_automation_backend', 'console_user_mismatch', 'evidence_must_be_outside_release',
                  'temporary_job_disappeared', 'invalid_gui_result', 'gui_acceptance_timeout',
-                 'temporary_job_cleanup_failed'}
+                 'temporary_job_cleanup_failed', 'target_config_required', 'inspection_python_required',
+                 'inspection_python_conflicts_with_config'}
         if type(exc) is ValueError and str(exc) in known:
             result['error'] = str(exc)
     print(json.dumps(result, ensure_ascii=False))

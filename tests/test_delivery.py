@@ -77,6 +77,27 @@ class DeliveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'unsupported_automation_backend'):
                 gui.run_once('check', '/does/not/exist', '/unused')
 
+    def test_config_free_inspection_cannot_be_used_for_renewal_or_another_python(self):
+        with patch.object(gui.sys,'platform','darwin'), patch.object(gui.subprocess,'run') as run:
+            for action in ('maintain','check','check-existing','close','discover','entry-verify'):
+                with self.assertRaisesRegex(ValueError,'target_config_required'):
+                    gui.run_once(action,None,'/unused',inspection_python='/python')
+            with self.assertRaisesRegex(ValueError,'inspection_python_required'):
+                gui.run_once('inspect-expanded',None,'/unused')
+            with self.assertRaisesRegex(ValueError,'inspection_python_conflicts_with_config'):
+                gui.run_once('inspect','/config','/unused',inspection_python='/another/python')
+            run.assert_not_called()
+        args=gui.command('inspect-expanded','/python',None)
+        self.assertNotIn('--config',args)
+        self.assertNotIn('None',args)
+        self.assertIn('--expose-native-tree',args)
+
+    def test_gui_runner_reports_annotated_startup_failure_without_waiting_for_timeout(self):
+        self.assertEqual(gui.finished_exit('state = not running\nlast exit code = 78: EX_CONFIG\n'),78)
+        self.assertEqual(gui.finished_exit('last exit code = 0\n'),0)
+        self.assertIsNone(gui.finished_exit('pid = 123\nlast exit code = 78: EX_CONFIG\n'))
+        self.assertIsNone(gui.finished_exit('state = waiting\n'))
+
     def test_discovery_distinguishes_name_from_id_and_restores_original(self):
         engine = Mock(); engine.cfg = {}; engine.visible_links.return_value = []
         ax = Mock(); ax.application.return_value = (None, None)

@@ -17,7 +17,13 @@ Installation order:
 2. Verify the Bot's organization using the native enterprise menu and the Bot's
    official identity. “Manage robots” is not the complete list of usable Bots.
    On WeCom 5.0.13, “查看更多机器人” opens the contacts Bot directory.
+   Use config-free `gui.py --action inspect-expanded --python <absolute-python>`
+   with a new private evidence directory before Bot IDs are available; never
+   fabricate IDs just to run diagnostics.
 3. Open this account's private conversation from the verified Bot's details.
+   If the permission page is accessible only through a conversation, you may
+   first open an empty candidate conversation from a native Bot directory row
+   for read-only identity inspection. Do not send or authorize until it matches.
    A new device may have no conversation or renewal link. Prepare and, within the
    user's authorization, send one entry link there; read it back locally. Do not
    send it to a group or another Bot, or search for history that does not exist.
