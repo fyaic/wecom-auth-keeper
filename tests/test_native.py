@@ -8,6 +8,18 @@ from keeper_common import KeeperError, emit_error
 
 @unittest.skipUnless(sys.platform == "darwin" and importlib.util.find_spec("ApplicationServices"), "Native dependencies unavailable")
 class NativeTests(unittest.TestCase):
+    def test_permission_press_failure_never_emits_mouse_events(self):
+        import keeper_ax
+        for actions in ([], ['AXPress']):
+            with patch.object(keeper_ax, 'frame', side_effect=[(20, 20, 50, 20), (0, 0, 560, 560)]), \
+                 patch.object(keeper_ax, 'AXUIElementCopyActionNames', return_value=(0, actions)), \
+                 patch.object(keeper_ax, 'ax_perform', return_value=-25200), \
+                 patch.object(keeper_ax, 'CGEventPost') as mouse:
+                with self.assertRaises(KeeperError) as caught:
+                    keeper_ax.click(object(), object(), allow_coordinate_fallback=False)
+                self.assertEqual(caught.exception.code, 'ax_press_failed')
+                mouse.assert_not_called()
+
     def test_clipboard_restores_original_formats_even_on_failure(self):
         import keeper_ax
         source, restored, board = Mock(), Mock(), Mock()

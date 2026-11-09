@@ -85,6 +85,10 @@ python3 -m venv .venv
 
 ## 3. 企业与页面导航验收
 
+- 已经打开的权限页可用 `gui.py --action check-existing`（等同 `renew.py --check --existing-window`）只读检查。它核对双 Bot ID、读取权限及有效期，不激活窗口、不导航、不发送消息、不访问或切换 Bridge 模式，因此不要求 Bridge 提供桌面锁。没有匹配页即失败，不能拿它替代从其他会话开始的无人值守导航验收。
+- `gui.py --action close` 也不改 Bridge：只对当前双 ID 绑定的权限页执行已核验的关闭控件 AXPress，不用坐标或键盘回退。旧 Bridge 不支持协调时，仍可完成诊断后关页；这不表示授权修改或提前续期已经安全共存。带导航的 `check`、`maintain` 和授权修改仍保留原协调要求。
+- 所有授权、取消授权及确认动作必须来自匹配的 AXWebArea 子树；同一窗口其他页面/弹层的同名按钮不算目标。AXPress 不支持或失败时返回 `ax_press_failed`，不退到鼠标点击；控件已经离开页面时返回 `control_target_changed`。适配新客户端时应检查实际控件结构，不能通过启用坐标回退“修好”授权步骤。
+
 - 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。
 - 没有 Bridge 的设备保持 `bridge_monitor=false`，不为续期安装 Bridge。存在 Bridge 时，先核对同一登录用户的服务地址。支持共同桌面锁的 Bridge 配置为 `bridge_monitor=true`、`bridge_url` 和 `bridge_coordination="shared-lock-v1"`。该协议需要 Bridge 同时升级（见 `delivery/BRIDGE-COORDINATION.md`），不是只改 Keeper 的配置即可工作。Keeper 验证协议、用户、锁文件 inode 和组织重新核验能力后才开始；Bridge 轮巡、监控和 UI 请求在此期间自动让出桌面，关页后恢复。已有私聊入口必须先准备好；该模式不支持调用 Bridge 发入口链接。旧 Bridge 不支持时明确停止，禁止关闭检测、SIGSTOP 或手动暂停服务冒充无人值守通过。旧 observe 兼容路径仍保留，但不能证明独占桌面；启用组织轮巡时明确拒绝。`--worker` 只供监督器内部使用，正式任务使用不带该参数的 `maintain.py`。
 - 默认将续期入口保存在**当前部署设备上、当前企业账号与目标 Bot 的私聊消息**中。先核对当前 CLI profile、官方授权链接的双 Bot ID 和目标机器人；不要复制其他设备/机器人的链接，不用群聊、他人的私聊或文件传输助手作为默认入口。

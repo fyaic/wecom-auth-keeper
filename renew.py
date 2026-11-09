@@ -144,6 +144,8 @@ class Renewal:
         return any(target_url(self.ax.ax_get(node, key), self.cfg) for key in ("AXURL", "AXValue", "AXTitle"))
 
     def bound(self, window):
+        if self.app is not None and window not in (self.ax.ax_get(self.app, "AXWindows") or []):
+            raise KeeperError("identity_unverified", "Target permission window is no longer live")
         matches = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea" and self.matches(n)]
         if len(matches) != 1:
             raise KeeperError("identity_unverified", "Expected one authorization page matching both configured bot identifiers")
@@ -332,13 +334,17 @@ class Renewal:
         return result
 
     def click(self, window, element):
-        self.bound(window)  # Recheck identity immediately before every action.
+        page = self.bound(window)  # Recheck identity immediately before every action.
         if element is None:
             raise KeeperError("control_missing", "Expected action control is missing")
-        self.ax.click(element, self.bound(window))
+        if not any(node == element for node in self.walk(page)):
+            raise KeeperError("control_target_changed", "Action control is no longer inside the verified permission page")
+        # A matching page elsewhere in the window does not bind a dialog/control
+        # to that page. Never fall back to a screen coordinate for authorization.
+        self.ax.click(element, page, allow_coordinate_fallback=False)
 
     def named(self, window, text, role=None):
-        return [n for n in self.walk(window) if self.text(n) == text and (role is None or self.ax.ax_get(n, "AXRole") == role)]
+        return [n for n in self.walk(self.bound(window)) if self.text(n) == text and (role is None or self.ax.ax_get(n, "AXRole") == role)]
 
     def authorize(self, window, name, old_expiry=None):
         for _ in range(3):
@@ -356,7 +362,7 @@ class Renewal:
                 if row["status"] == "authorized" and (old_expiry is None or row["expiry"] > old_expiry):
                     return row
                 if not confirmed:
-                    candidates = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXButton"
+                    candidates = [n for n in self.walk(self.bound(window)) if self.ax.ax_get(n, "AXRole") == "AXButton"
                                   and self.text(n) in {"确认", "确定", "重新授权", "同意"}]
                     if len(candidates) > 1:
                         raise KeeperError("ambiguous_confirmation", "Multiple confirmation controls in target window")
@@ -400,7 +406,7 @@ class Renewal:
 
     def run(self, mode, existing_only=False, within_hours=24):
         # Inspection does not send messages or alter bridge state.
-        if mode == "check" and self.cfg.get("bridge_monitor", self.cfg.get("bridge_send_link", False)):
+        if mode == "check" and not existing_only and self.cfg.get("bridge_monitor", self.cfg.get("bridge_send_link", False)):
             check_bridge_coordination(self.cfg)
         cfg = self.cfg if mode != "check" else {**self.cfg, "bridge_monitor": False}
         with monitor_guard(cfg):
@@ -423,6 +429,9 @@ class Renewal:
                 "status": r["status"], "expiry": r["expiry"].isoformat(timespec="minutes") if r["expiry"] else None,
                 "expiry_before": before[n]["expiry"].isoformat(timespec="minutes") if before[n]["expiry"] else None,
             } for n, r in after.items()}, "pending_recovery": self.journal.exists()}
+            if mode == "check" and existing_only:
+                result.update(navigation_performed=False, authorization_changed=False,
+                              desktop_coordination="not_required_read_only")
             if not healthy:
                 result["error"] = "permissions_not_healthy"
             atomic_json(self.cfg["state_file"], {**result, "read_at": datetime.now().isoformat()})
@@ -472,8 +481,9 @@ def main(argv=None):
             with process_lock(gui_lock_path(), cfg["lock_wait"]):
                 try:
                     engine = Renewal(cfg, ax)
-                    if args.close_window and cfg.get("bridge_monitor", cfg.get("bridge_send_link", False)):
-                        check_bridge_coordination(cfg)
+                    # Cleanup uses only a live, dual-ID-bound page's AXPress
+                    # close control. It never focuses, navigates, changes Bridge
+                    # mode or falls back to mouse/keyboard input.
                     result, code = (engine.close_window() if args.close_window else
                                     engine.run(mode, args.existing_window, args.within_hours))
                 except Exception as exc:

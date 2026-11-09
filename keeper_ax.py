@@ -125,7 +125,7 @@ def frame(element):
     return None
 
 
-def click(element, window):
+def click(element, window, *, allow_coordinate_fallback=True):
     bounds, outer = frame(element), frame(window)
     if not bounds or not outer:
         raise RuntimeError("Element geometry unavailable")
@@ -148,6 +148,8 @@ def click(element, window):
         raise RuntimeError("Element outside target window; scroll it into view first")
     if "AXPress" in actions and ax_perform(element, "AXPress") == 0:
         return
+    if not allow_coordinate_fallback:
+        raise KeeperError("ax_press_failed", "Target control did not accept its native press action")
     for kind in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
         CGEventPost(kCGHIDEventTap, CGEventCreateMouseEvent(None, kind, CGPoint(cx, cy), 0))
         time.sleep(0.05)

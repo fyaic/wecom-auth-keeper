@@ -59,7 +59,7 @@ class FakeAX:
     def ax_perform(self, element, action):
         self.app['AXFocusedWindow'] = element
         return 0
-    def click(self, element, window):
+    def click(self, element, window, *, allow_coordinate_fallback=True):
         name, text = element.get('_row'), element['AXTitle']
         self.clicks.append((text, name))
         if text == '已授权': self.menu = name
@@ -194,8 +194,50 @@ class StateTests(Fixture):
         ax=FakeAX(self.cfg)
         with patch('renew.bridge_request', return_value={'enabled':False,'running':False}) as http:
             self.engine(ax).run('check',True)
-        http.assert_called_once_with(self.cfg, 'GET', '/wecom/orgs/rotator/status')
+        http.assert_not_called()
         self.assertEqual(ax.clicks,[])
+
+    def test_existing_check_does_not_focus_or_call_a_running_bridge(self):
+        self.cfg.update(bridge_send_link=True, bridge_monitor=True)
+        ax = FakeAX(self.cfg)
+        with patch('renew.bridge_request', side_effect=AssertionError('Bridge untouched')), \
+             patch.object(ax, 'activate', side_effect=AssertionError('no focus')), \
+             patch.object(ax, 'ax_perform', side_effect=AssertionError('no AX action')):
+            result, code = self.engine(ax).run('check', True)
+        self.assertEqual(code, 0)
+        self.assertFalse(result['navigation_performed'])
+        self.assertFalse(result['authorization_changed'])
+
+    def test_foreign_and_detached_controls_cannot_use_a_matching_page_as_authority(self):
+        ax = FakeAX(self.cfg)
+        engine = self.engine(ax)
+        foreign = node('AXButton', '确认')
+        ax.window['AXChildren'].append(foreign)
+        detached = ax.page['AXChildren'][1]
+        ax.page['AXChildren'].remove(detached)
+        self.assertEqual(engine.named(ax.window, '确认'), [])
+        for control in (foreign, detached):
+            with self.assertRaises(KeeperError) as error:
+                engine.click(ax.window, control)
+            self.assertEqual(error.exception.code, 'control_target_changed')
+        self.assertEqual(ax.clicks, [])
+
+    def test_disappeared_window_cannot_reuse_a_cached_matching_tree(self):
+        ax = FakeAX(self.cfg)
+        engine = self.engine(ax)
+        engine.app = ax.app
+        ax.app['AXWindows'] = []
+        with self.assertRaises(KeeperError) as error:
+            engine.click(ax.window, ax.page['AXChildren'][1])
+        self.assertEqual(error.exception.code, 'identity_unverified')
+        self.assertEqual(ax.clicks, [])
+
+    def test_authorization_disables_mouse_fallback(self):
+        ax = FakeAX(self.cfg)
+        with patch.object(ax, 'click') as click:
+            self.engine(ax).click(ax.window, ax.page['AXChildren'][1])
+        self.assertIs(click.call_args.args[1], ax.page)
+        self.assertFalse(click.call_args.kwargs['allow_coordinate_fallback'])
 
     def test_negative_coordinates_are_not_rejected_by_row_parser(self):
         ax=FakeAX(self.cfg)

@@ -123,9 +123,9 @@ class MaintenanceTests(Fixture):
     def test_partial_failure_persists_first_row_and_recovers_second_before_more_revokes(self):
         ax, engine = self.setup_cycle(['发送消息', '发送邮件', '搜索与获取微盘文件内容'])
         original = ax.click
-        def fail_mail(el, window):
+        def fail_mail(el, window, **kwargs):
             ax.fail_grant = el.get('_row') == '发送邮件'
-            return original(el, window)
+            return original(el, window, **kwargs)
         with patch.object(ax, 'click', side_effect=fail_mail):
             result, code = self.cycle(ax, engine)
         self.assertEqual(code, 2)

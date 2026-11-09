@@ -1,12 +1,28 @@
 from unittest.mock import patch
 import json
 from pathlib import Path
+import contextlib
+import io
+import sys
+import renew
 
 from test_keeper import Fixture, FakeAX, node
 from keeper_common import KeeperError, atomic_json
 
 
 class CleanupTests(Fixture):
+    def test_public_cleanup_does_not_contact_or_reconfigure_bridge(self):
+        self.cfg.update(bridge_monitor=True, bridge_url='http://127.0.0.1:23392')
+        ax, close, other = self.setup_window()
+        with patch('renew.sys.platform', 'darwin'), patch.dict(sys.modules, {'keeper_ax': ax}), \
+             patch('renew.gui_lock_path', return_value=self.root / 'gui.lock'), \
+             patch('renew.bridge_request', side_effect=AssertionError('Bridge untouched')), \
+             patch.object(ax, 'ax_perform', side_effect=close), contextlib.redirect_stdout(io.StringIO()) as output:
+            code = renew.main(['--config', str(self.write_config()), '--close-window'])
+        self.assertEqual(code, 0)
+        self.assertTrue(json.loads(output.getvalue())['closed'])
+        self.assertEqual(ax.app['AXWindows'], [other])
+
     def setup_window(self):
         ax = FakeAX(self.cfg)
         button = node('AXButton', AXSubrole='AXCloseButton')

@@ -20,12 +20,14 @@ sys.path.insert(0, str(ROOT))
 
 
 def command(action, python, config):
-    entries = {'check': ('renew.py', '--check'), 'close': ('renew.py', '--close-window'),
+    entries = {'check': ('renew.py', '--check'), 'check-existing': ('renew.py', '--check'),
+               'close': ('renew.py', '--close-window'),
                'maintain': ('maintain.py', None), 'discover': ('delivery/discover.py', None),
                'inspect': ('delivery/desktop_inspect.py', None),
                'inspect-expanded': ('delivery/desktop_inspect.py', '--expose-native-tree')}
     entry, flag = entries[action]
-    return [python, str(ROOT / entry), '--config', str(config)] + ([flag] if flag else [])
+    return ([python, str(ROOT / entry), '--config', str(config)] + ([flag] if flag else [])
+            + (['--existing-window'] if action == 'check-existing' else []))
 
 
 def run_once(action, config, evidence):
@@ -83,7 +85,7 @@ def run_once(action, config, evidence):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', required=True)
-    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'check', 'close', 'maintain'], required=True)
+    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'check', 'check-existing', 'close', 'maintain'], required=True)
     p.add_argument('--evidence-dir', required=True, help='New private directory outside the release')
     args = p.parse_args()
     try:

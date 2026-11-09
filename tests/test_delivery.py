@@ -70,6 +70,9 @@ class DeliveryTests(unittest.TestCase):
         self.assertNotIn('--worker', args)
         self.assertEqual(args[0], '/path with space/python')
         self.assertEqual(Path(args[1]).name, 'maintain.py')
+        read_args = gui.command('check-existing', '/python', '/private/config.json')
+        self.assertEqual(Path(read_args[1]).name, 'renew.py')
+        self.assertEqual(read_args[-2:], ['--check', '--existing-window'])
         with patch.object(gui.sys, 'platform', 'win32'):
             with self.assertRaisesRegex(ValueError, 'unsupported_automation_backend'):
                 gui.run_once('check', '/does/not/exist', '/unused')
