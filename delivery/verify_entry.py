@@ -99,6 +99,14 @@ def verify_navigation(cfg, ax, *, engine=None):
         result.update(page_identity_verified=True,
                       rows={n: {'status': r['status'], 'expiry': r['expiry'].isoformat(timespec='minutes')
                                 if r['expiry'] else None} for n, r in rows.items()})
+        # The same bare “授权” button can mean an expired grant or a scope
+        # never granted to this Bot. Do not turn first-run discovery into an
+        # unattended initial grant without an established expiry baseline.
+        missing_baseline = [name for name, row in rows.items() if row['expiry'] is None]
+        if missing_baseline:
+            result['authorization_baseline_required'] = missing_baseline
+            raise KeeperError('bootstrap_authorization_baseline_required',
+                              'Entry found; selected permissions have no expiry evidence. Resolve initial authorization before scheduling')
         closed, _ = engine.close_window()
         opened = False
         if not closed.get('closed'):
@@ -117,7 +125,8 @@ def verify_navigation(cfg, ax, *, engine=None):
     finally:
         if opened:
             try:
-                engine.close_window()
+                closed, _ = engine.close_window()
+                result['cleanup_verified'] = closed.get('closed') is True
             except Exception:
                 result['cleanup_verified'] = False
                 if failure is None:

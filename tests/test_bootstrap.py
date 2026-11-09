@@ -95,7 +95,7 @@ class BootstrapTests(Fixture):
         engine.select_window.side_effect = [None, page]
         engine.visible_links.return_value = [(0,object(),window)] if links else []
         engine.wait.side_effect = lambda read, accept, error: read()
-        engine.read_rows.return_value = {n: {'status':'expired','expiry':None} for n in self.cfg['target_rows']}
+        engine.read_rows.return_value = {n: {'status':'authorized','expiry':datetime.now()+timedelta(days=3)} for n in self.cfg['target_rows']}
         engine.close_window.return_value = ({'ok':True,'closed':True},0)
         menu = [[{'name':'Enterprise B','selected':True}], [{'name':final_org,'selected':True}]]
         patches = [patch.object(entry,'global_search',return_value=search),
@@ -124,6 +124,23 @@ class BootstrapTests(Fixture):
                 with self.assertRaises(KeeperError) as error:entry.verify_navigation(self.cfg,ax,engine=engine)
             self.assertEqual(error.exception.code,expected)
             if same_chat or not links:engine.open.assert_not_called()
+
+    def test_readable_entry_without_expiry_does_not_enable_initial_grants(self):
+        from contextlib import ExitStack
+        engine,ax,patches=self.flow()
+        name=self.cfg['target_rows'][0]
+        engine.read_rows.return_value[name]={'status':'expired','expiry':None}
+        with ExitStack() as stack:
+            for p in patches:stack.enter_context(p)
+            with self.assertRaises(KeeperError) as error:entry.verify_navigation(self.cfg,ax,engine=engine)
+        self.assertEqual(error.exception.code,'bootstrap_authorization_baseline_required')
+        result=error.exception.entry_verification
+        self.assertTrue(result['page_identity_verified'])
+        self.assertTrue(result['cleanup_verified'])
+        self.assertEqual(result['authorization_baseline_required'],[name])
+        self.assertFalse(result['authorization_changed'])
+        self.assertFalse(result['ok'])
+        engine.close_window.assert_called_once()
 
     def test_open_timeout_still_closes_bound_page_and_preserves_primary_error(self):
         from contextlib import ExitStack

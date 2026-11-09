@@ -57,6 +57,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 入口未准备好时维护/定时任务生成返回 bootstrap_incomplete；修好本步骤再继续。换目标、profile、组织、权限范围或 Python/CLI/Node 路径后重新验证；不要删掉 entry_receipt 配置来绕过。已有旧配置保持原行为，不在正在运行的服务上强制迁移。
 
+`bootstrap_authorization_baseline_required` 表示入口和页面已读到，但所选权限没有有效期证据。仅一个“授权”按钮不能区分从未授权与过期；先核对既有授权或完成用户确认的一次首次授权，再重验建立基线，不重复发送链接或搜索历史。此时不生成成功回执，不开启维护。
+
 | 工具 | 用途及限制 |
 | --- | --- |
 | `gui.py --action inspect-expanded --python <绝对Python路径>`（无config） | 首次接入时读取原生组织菜单与可见Bot名称候选，不需要虚构Bot配置；只读、不导航、不授予权限。 |
