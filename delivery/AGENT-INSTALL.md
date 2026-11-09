@@ -13,6 +13,15 @@ python3 delivery/onboard.py
 
 manifest 只检查包内容完整性，不证明发布者身份。需要 Python 3.11+；缺少时按用户授权从可信官方来源安装。macOS 检查实际客户端版本、CPU 架构、已有维护任务及实际运行 Python；Windows 当前返回 unsupported_automation_backend，没有 UIA 后端，不安装 pyobjc 或伪造计划任务成功。支持范围见 [DESIGN.md](DESIGN.md)，实际证据见 [VALIDATION.md](VALIDATION.md)。
 
+在 macOS 为本版本准备独立执行环境：
+
+```bash
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
+```
+
+不复用其他业务服务的依赖环境。若本机已有经系统授权的专用执行 Python，可在私有配置中明确填写其绝对路径，并如实记录复用；验收与正式任务必须使用同一个执行主体，不能把这种复测说成从空设备全新安装。
+
 配置、输入、聊天入口文本、诊断和验收记录全部放包外本机私有目录。不要修改本机其他 Bot 的凭据、业务目录或常驻服务；先识别同 Bot 已有任务，避免重复安装。
 
 ## 1. 完成首次接入，不直接搜索不存在的历史
@@ -48,7 +57,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 | 工具 | 用途及限制 |
 | --- | --- |
-| `gui.py --action inspect` | 只读当前原生控件与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。 |
+| `gui.py --action inspect` | 只读当前原生控件、通讯录 Bot 分组与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。通讯录只报告可见候选数量/位置，不声明列表完整或身份已验证。 |
 | `gui.py --action inspect-expanded` | 临时请求 AXEnhancedUserInterface，读回生效并恢复原值；不是系统辅助功能授权。 |
 | `gui.py --action discover` | 仅适用于入口已经准备好后的跨组织查找；缺少私聊或入口时回首次接入，不反复执行。 |
 | `gui.py --action check-existing` | 只读已经打开且双ID匹配的页，不激活、不导航、不调用 Bridge；不能算自动找回。 |
@@ -58,7 +67,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 每次 evidence-dir 使用新私有目录，保留实际进程输出与退出码。任务登记成功、HTTP200、空日志或 Agent 自述不能算验收。
 
-5.0.13 原生管理页可能肉眼可见而 AX 标签为空；原生卡片还可能将标签合并进 AXTitle/AXDescription。inspect-expanded 只输出固定标签与精确/包含匹配，不把包含匹配直接当成可点击控件。切页后可能需要重新展开树，重复设置 true 不等于树刷新。必须区分门户/列表/详情/权限弹窗；管理列表只显示可管理的 Bot，不代表可使用的全部 Bot。
+5.0.13 原生管理页可能肉眼可见而 AX 标签为空；原生卡片还可能将标签合并进 AXTitle/AXDescription。inspect-expanded 只输出固定标签与精确/包含匹配，不把包含匹配直接当成可点击控件。切页后可能需要重新展开树，重复设置 true 不等于树刷新。必须区分门户/列表/详情/权限弹窗；管理列表只显示可管理的 Bot，不代表可使用的全部 Bot。“查看更多机器人”会进入通讯录的“智能机器人”分组，用实际列表行识别，不套管理卡片布局；页面未知或列表未完整读取，不能报告“没有 Bot”。
 
 组织导航目前仅已知 5.0.13 中文适配器：准确企业菜单名、企业图标行、唯一 checkmark、切换后重新定位和验证。企业入口采用版本约束的相对窗口位置，不能外推其他版本/语言/布局。未知页面先诊断，不能硬套坐标。
 

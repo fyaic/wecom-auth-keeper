@@ -83,3 +83,32 @@ class DesktopInspectionTests(Fixture):
         self.assertEqual(labels, [{'label': '可使用权限', 'match': 'contained', 'attributes': ['AXTitle']}])
         detail = inspection.native_labels(ax, node('AXImage', '机器人详情'))
         self.assertEqual([v['label'] for v in detail], ['机器人详情'])
+
+    def test_contacts_outline_is_distinct_from_management_cards_and_omits_names(self):
+        ax = self.adapter()
+        def row(name, icon, y):
+            return node('AXRow', frame=(20,y,200,30), children=[
+                node('AXTextArea', AXValue=name), node('AXImage', AXDescription=icon)])
+        outline = node('AXOutline', frame=(20,20,220,300), children=[
+            row('智能机器人','avatar starred bot selected',20),
+            row(self.cfg['bot_chat_name'],'icon bot',60),
+            row('private other Bot','icon bot',100),
+            row('private organization','avatar company',140),
+            row(self.cfg['bot_chat_name'],'icon bot',180)])
+        ax.window['AXChildren'].append(outline)
+        result = inspection.inspect_desktop(self.cfg, ax)
+        directory = result['windows'][0]['bot_directories'][0]
+        self.assertEqual(directory['kind'],'contacts_bot_directory')
+        self.assertEqual(directory['visible_bot_rows'],2)
+        self.assertEqual(len(directory['configured_name_candidates']),1)
+        self.assertFalse(directory['list_complete'])
+        self.assertFalse(directory['target_identity_verified'])
+        encoded=json.dumps(directory)
+        self.assertNotIn('private',encoded)
+        self.assertNotIn(self.cfg['bot_chat_name'],encoded)
+        # A page can mention the same heading/name without being a directory.
+        outline['AXRole']='AXTable'
+        self.assertEqual(inspection.inspect_desktop(self.cfg,ax)['windows'][0]['bot_directories'],[])
+        outline['AXRole']='AXOutline'
+        outline['AXChildren'][0]['AXChildren'][1]['AXDescription']='unrelated icon'
+        self.assertEqual(inspection.inspect_desktop(self.cfg,ax)['windows'][0]['bot_directories'],[])

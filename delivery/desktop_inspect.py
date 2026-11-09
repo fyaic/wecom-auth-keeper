@@ -83,6 +83,51 @@ def native_controls(engine, root):
         stack.extend((c, depth + 1) for c in engine.ax.ax_get(node, 'AXChildren') or [])
 
 
+def bot_directory(engine, window, cfg):
+    """Recognize the 5.0.13 contacts landing page, not management cards.
+
+    Only fixed native icon/heading pairs qualify an outline. Return counts and
+    candidate geometry, never names or other contact text. Visible rows cannot
+    establish a complete directory, Bot identity, organization or private chat.
+    """
+    ax = engine.ax
+    directories = []
+    for outline in native_controls(engine, window):
+        if ax.ax_get(outline, 'AXRole') != 'AXOutline':
+            continue
+        rows = [n for n in ax.ax_get(outline, 'AXChildren') or []
+                if ax.ax_get(n, 'AXRole') == 'AXRow']
+        parsed = []
+        for row in rows:
+            nodes = list(engine.walk(row))
+            icons = {str(ax.ax_get(n, 'AXDescription') or '') for n in nodes
+                     if ax.ax_get(n, 'AXRole') == 'AXImage'}
+            names = [engine.text(n) for n in nodes
+                     if ax.ax_get(n, 'AXRole') == 'AXTextArea' and engine.text(n)]
+            parsed.append((row, icons, names))
+        headings = [i for i, (_, icons, names) in enumerate(parsed)
+                    if names == ['智能机器人'] and icons & {
+                        'avatar starred bot selected', 'avatar starred bot'}]
+        if len(headings) != 1:
+            continue
+        count, candidates = 0, []
+        for row, icons, names in parsed[headings[0] + 1:]:
+            if icons & {'avatar b2b tree', 'avatar company', 'icon new friend'}:
+                break
+            if 'icon bot' not in icons or len(names) != 1:
+                continue
+            bounds = ax.frame(row)
+            if not engine.contains(ax.frame(outline), bounds):
+                continue
+            count += 1
+            if names == [cfg['bot_chat_name']]:
+                candidates.append({'bounds': bounds, 'actions': ax.action_names(row)})
+        directories.append({'kind': 'contacts_bot_directory', 'bounds': ax.frame(outline),
+                            'visible_bot_rows': count, 'configured_name_candidates': candidates,
+                            'list_complete': False, 'target_identity_verified': False})
+    return directories
+
+
 def snapshot(engine, native, cfg, ax):
     result = {'ok': True, 'mode': 'desktop-inspection', 'renewal_verified': False,
               'navigation_performed': False, 'authorization_changed': False,
@@ -91,7 +136,8 @@ def snapshot(engine, native, cfg, ax):
     for number, window in enumerate(ax.ax_get(engine.app, 'AXWindows') or []):
         entry = {'window_index': number, 'bounds': ax.frame(window),
                  'main_window_sidebar_present': bool(sidebar_rows(engine, window)),
-                 'native_controls': [], 'official_permission_pages': []}
+                 'native_controls': [], 'official_permission_pages': [],
+                 'bot_directories': bot_directory(engine, window, cfg)}
         result['windows'].append(entry)
         for node in native_controls(engine, window):
             for match in native_labels(ax, node):
