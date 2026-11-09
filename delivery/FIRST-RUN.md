@@ -90,8 +90,8 @@ python3 delivery/existing_entry.py --selection /absolute/private/selection.json 
 
 ## 3. 从已核验 Bot 建立私聊，准备一次入口
 
-1. 关闭权限页，回到同一 Bot 详情，使用“去使用”“发消息”或客户端等价的单聊入口（若第2步已由该资料页进入并完成身份核验，则复用这个会话），建立**本机当前账号与这个 Bot 的私聊**。不通过建群完成，不用文件传输助手、其他人的私聊或另一设备的历史代替。
-2. 安装 Agent 核对进入路径与聊天类型。仅名称匹配不证明是私聊；不要在同名群里发送链接。无法从已核验详情进入时先修正该步骤。
+1. 关闭权限页，回到同一Bot详情，从原生单聊入口建立**本机当前账号与这个Bot的私聊**。5.0.13实测可能是两步：管理详情的“去使用”→通讯录机器人资料→资料页的“发消息”。资料页有“由我创建”“个人使用机器人”“去管理”以及“发消息/添加到群聊”；这还不是聊天。点“发消息”是进入私聊的导航，不是权限页的“授权”，不能点“添加到群聊”。若第2步已实际进入私聊则复用，不重复建入口。
+2. 安装Agent核对进入路径、消息视图、真实聊天标题、消息区域和底部输入框。通讯录选中的Bot行、全局搜索框或任意AXTextArea均不能证明已经进入私聊；不能把它们当作聊天标题/发送输入框。仅名称匹配也不证明是私聊，不在同名群、本人诊断会话或其他人的私聊发送。inspect的bot_contact_profile_hint提示资料页，private_chat_verified始终为false，不能冒充安装观察。
 3. 根据已核验的CLI Bot ID、官方URL、权限和组织，用`onboard.py --input <私有输入.json> --selection <成功的selection.json> --output <私有配置.json>`生成草稿。`organization_selector_name`填写真实原生菜单名，`organization_name`保留业务企业名称。缺少明确选择记录返回`target_selection_required`；输入的Bot、profile或组织偏离选择记录返回`requested_target_mismatch`，不写配置。成功返回`entry_preparation_required`，不是安装成功。
 4. 生成准备发送的文本（只落盘，不发送）：
 

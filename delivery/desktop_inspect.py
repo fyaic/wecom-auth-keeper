@@ -27,7 +27,8 @@ class NativeInspection:
         self.ax, self.app = ax, None
 
 NATIVE_LABELS = {'消息', '机器人', '智能机器人', '管理机器人', '我的机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
-                 '查找聊天记录', '关闭聊天记录', '查看更多机器人', '机器人资料', '发消息'}
+                 '查找聊天记录', '关闭聊天记录', '查看更多机器人', '机器人资料', '发消息',
+                 '由我创建', '个人使用机器人', '添加到群聊'}
 PERMISSION_LABELS = {'授权', '已授权', '取消授权', '确认', '确定', '同意', '重新授权'}
 
 
@@ -175,6 +176,14 @@ def snapshot(engine, native, cfg, ax):
             for match in native_labels(ax, node):
                 entry['native_controls'].append({**match, 'role': ax.ax_get(node, 'AXRole'),
                                                 'bounds': ax.frame(node), 'actions': ax.action_names(node)})
+        labels = {c['label'] for c in entry['native_controls'] if c['match'] == 'exact'}
+        # "去使用" can land on a contacts profile, with a selected Bot row
+        # and search/text controls, before its "发消息" navigation button.
+        # This is a diagnostic hint only, never identity or private-chat proof.
+        entry['bot_contact_profile_hint'] = (
+            {'发消息', '添加到群聊'} <= labels
+            and bool(labels & {'由我创建', '个人使用机器人', '去管理'}))
+        entry['private_chat_verified'] = False
         for node in web_pages(engine, window):
             values = [ax.ax_get(node, k) for k in ('AXURL', 'AXValue', 'AXTitle')]
             values = [v for v in values if official_page(v)]

@@ -48,6 +48,10 @@ Installation order:
    --selection ...`. Keep the original official URL parameters. Do not use an
    error from another Bot to reject the requested Bot or send the user elsewhere.
 3. Open this account's private conversation from the verified Bot's details.
+   On 5.0.13, “去使用” can first open the contacts Bot profile; then use that
+   profile's “发消息” navigation button. A selected contacts row, global search
+   or any AXTextArea is not a conversation/composer. Verify the actual message
+   view, header and composer before sending; never use “添加到群聊”.
    If the permission page is accessible only through a conversation, you may
    first open an empty candidate conversation from a native Bot directory row
    for read-only identity inspection. Do not send or authorize until it matches.

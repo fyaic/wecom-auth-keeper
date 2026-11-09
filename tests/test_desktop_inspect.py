@@ -9,6 +9,20 @@ inspection = module('desktop_inspect')
 
 
 class DesktopInspectionTests(Fixture):
+    def test_contacts_profile_is_not_private_chat_even_with_selected_row_and_editor(self):
+        ax = self.adapter()
+        ax.window['AXChildren'] += [
+            node('AXOutline', children=[node('AXRow', AXSelected=True, children=[
+                node('AXTextArea', AXValue='private bot name')])]),
+            node('AXScrollArea', children=[node('AXButton', '发消息'), node('AXButton', '添加到群聊'),
+                                         node('AXStaticText', '由我创建')])]
+        result = inspection.inspect_desktop(None, ax)['windows'][0]
+        self.assertTrue(result['bot_contact_profile_hint'])
+        self.assertFalse(result['private_chat_verified'])
+        self.assertNotIn('private bot name', json.dumps(result))
+        ax.window['AXChildren'][-1]['AXRole'] = 'AXTable'
+        self.assertFalse(inspection.inspect_desktop(None, ax)['windows'][0]['bot_contact_profile_hint'])
+
     def test_creator_error_is_reported_without_private_body_or_success_rows(self):
         ax = self.adapter()
         ax.page['AXChildren'] = [node('AXStaticText',

@@ -49,6 +49,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 草稿返回 `entry_preparation_required`，包含 entry_receipt 路径。`prepare_entry.py` 只生成准备发送的文本，sent=false 不代表已经发消息。安装 Agent 必须从已核验 Bot 详情进入正确私聊；首次没有会话不能仅重跑全局/历史搜索。收到发送授权后只发一次，然后本机读回核验。不默认使用群聊、他人私聊、文件传输助手或另一设备的历史。
 
+新版的“去使用”可能先进入通讯录Bot资料页，再点资料页“发消息”才是私聊。看到“由我创建/个人使用机器人/去管理/添加到群聊”时仍是资料页；不能将通讯录选中行当聊天标题，将全局搜索或任意AXTextArea当发送框。按FIRST-RUN核验实际消息视图、标题、消息区域和底部composer后才发送。
+
 ## 2. 后台入口验收与诊断
 
 安装 Agent 核对私聊类型并记录来源，关闭权限页、切到其他普通聊天或企业，然后运行：
