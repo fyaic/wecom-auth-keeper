@@ -11,6 +11,12 @@ page as proof of successful unattended renewal.
 
 Installation order:
 
+0. This distribution supports a desktop logged in as the Bot creator's primary
+   account, maintaining Bots created by that account. Existing CLI credentials
+   alone do not satisfy this requirement. Establish it from the existing CLI and
+   official UI identity before enabling maintenance; preserve bindings and stop
+   installation on a creator rejection. Do not switch the login of a desktop
+   used by another service without the user's authorization.
 1. Discover the business service's actual CLI profile and intended Bot. Use the
    official CLI to inspect identity; do not read credentials or replace another
    Bot's binding. For an authorized existing profile, run

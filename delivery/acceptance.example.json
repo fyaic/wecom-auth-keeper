@@ -26,6 +26,8 @@
   "scheduled_run_verified": false,
   "runtime_human_or_agent_clicks": null,
   "bootstrap": {
+    "desktop_creator_account_verified": false,
+    "creator_identity_evidence": null,
     "target_bot": "not_selected",
     "cli_binding": "not_verified",
     "organization_mapping": "not_verified",
