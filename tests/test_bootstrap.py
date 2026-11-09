@@ -20,7 +20,9 @@ onboard = module('onboard')
 class BootstrapTests(Fixture):
     def draft(self):
         self.cfg.update(entry_receipt=str(self.root/'entry.json'), organization_selector_name='Enterprise B',
-                        organization_navigation='sidebar-5.0.13', venv_python=sys.executable)
+                        organization_navigation='sidebar-5.0.13', venv_python=sys.executable,
+                        authorization_url='https://work.weixin.qq.com/ai/aiHelper/authorizationList?'
+                        'aibotid=123&str_aibotid=fixture&type=6&pc_bar_bg=%23FFFFFF&for_native=1')
         return self.cfg
 
     def receipt(self):
@@ -50,6 +52,7 @@ class BootstrapTests(Fixture):
                              ('venv_python', '/another/python'), ('bot_chat_name', 'renamed')]:
             self.assertFalse(entry_status({**self.cfg, field:value})['ok'])
         self.assertFalse(entry_status({**self.cfg,'wecom_node':'/another/bin/node'})['ok'])
+        self.assertFalse(entry_status({**self.cfg,'authorization_url':self.cfg['authorization_url']+'&ww_vw=780'})['ok'])
         with patch('keeper_bootstrap.device_binding', return_value='other-device'):
             self.assertFalse(entry_status(self.cfg)['ok'])
         for field in ('cleanup_verified', 'cold_start_verified', 'cli_identity_verified'):
@@ -71,6 +74,24 @@ class BootstrapTests(Fixture):
         self.assertEqual(p.stat().st_mode & 0o777, 0o600)
         with self.assertRaises(FileExistsError): prepare.prepare(self.cfg, p)
         with self.assertRaises(ValueError): entry_message({**self.cfg, 'organization_selector_name':''})
+
+    def test_official_url_survives_onboarding_and_message_byte_for_byte(self):
+        self.draft()
+        url = self.cfg['authorization_url']
+        value={'bot_chat_name':'fixture','organization_name':'Business B','organization_selector_name':'Enterprise B',
+               'cli_bot_id':'fixture','authorization_url':url,'target_rows':['发送消息']}
+        path=self.root/'new.json'
+        onboard.configure(value,path,'Darwin')
+        cfg=json.loads(path.read_text())
+        self.assertEqual(cfg['authorization_url'],url)
+        self.assertEqual(entry_message(cfg).splitlines()[-1],url)
+        with self.assertRaisesRegex(ValueError,'cli_bot_identity_mismatch'):
+            entry_message({**cfg,'aibotid':'999'})
+        cfg.pop('authorization_url')
+        with self.assertRaisesRegex(ValueError,'official_authorization_url_required'):
+            entry_message(cfg)
+        cfg.pop('entry_receipt')
+        self.assertIn('type=1',entry_message(cfg))
 
     def test_cli_checks_the_selected_profile_and_rejects_wrong_bot(self):
         self.draft();self.cfg['cli_config_dir']='/private/selected'

@@ -13,7 +13,12 @@ Installation order:
 
 1. Discover the business service's actual CLI profile and intended Bot. Use the
    official CLI to inspect identity; do not read credentials or replace another
-   Bot's binding. If missing, complete the official first-time setup separately.
+   Bot's binding. For an authorized existing profile, run
+   `delivery/existing_entry.py` to recover its exact official renewal URL from a
+   read-only CLI response before exploring the UI. Preserve all URL parameters.
+   Expiry (`850003`), missing chat history, a renamed Bot or an unverified desktop
+   identity never justifies `auth init`, a new profile or a QR code. Only a
+   genuinely missing binding with a confirmed new-setup request uses first-time setup.
 2. Verify the Bot's organization using the native enterprise menu and the Bot's
    official identity. “Manage robots” is not the complete list of usable Bots.
    On WeCom 5.0.13, “查看更多机器人” opens the contacts Bot directory.

@@ -9,11 +9,11 @@ import platform
 import plistlib
 import shutil
 import sys
-from urllib.parse import urlsplit, parse_qs
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from keeper_capabilities import CAPABILITY_LABELS
+from keeper_bootstrap import authorization_identity
 
 
 def detect(system=None):
@@ -61,14 +61,8 @@ def configure(value, destination, system=None):
     for key in required - {'target_rows'}:
         if not isinstance(value[key], str) or not value[key].strip() or value[key].startswith('<') or '\n' in value[key]:
             raise ValueError('missing_identity_or_organization')
-    url = urlsplit(value['authorization_url'])
-    query = parse_qs(url.query)
-    if (url.scheme != 'https' or url.hostname != 'work.weixin.qq.com' or url.port not in (None, 443)
-            or url.username or url.password or url.fragment or url.path != '/ai/aiHelper/authorizationList'
-            or len(query.get('aibotid', [])) != 1 or len(query.get('str_aibotid', [])) != 1
-            or not query['aibotid'][0].isdigit()):
-        raise ValueError('invalid_authorization_url')
-    bot = query['str_aibotid'][0]
+    identity = authorization_identity(value['authorization_url'])
+    bot = identity['str_aibotid']
     if bot != value['cli_bot_id']:
         raise ValueError('cli_bot_identity_mismatch')
     rows = value['target_rows']
@@ -78,9 +72,9 @@ def configure(value, destination, system=None):
     destination = Path(destination).expanduser().resolve()
     if destination == ROOT or ROOT in destination.parents:
         raise ValueError('private_config_must_be_outside_release')
-    key = hashlib.sha256((query['aibotid'][0] + ':' + bot).encode()).hexdigest()[:12]
+    key = hashlib.sha256((identity['aibotid'] + ':' + bot).encode()).hexdigest()[:12]
     state = destination.parent / ('state-' + key)
-    cfg = {'bot_chat_name': value['bot_chat_name'], 'aibotid': query['aibotid'][0], 'str_aibotid': bot,
+    cfg = {'bot_chat_name': value['bot_chat_name'], **identity, 'authorization_url': value['authorization_url'],
            'target_rows': rows, 'chat_history_navigation': True, 'bridge_send_link': False,
            'bridge_monitor': False, 'venv_python': str(ROOT / '.venv/bin/python3'),
            'state_file': str(state / 'state.json'), 'log_file': str(state / 'run.log'),

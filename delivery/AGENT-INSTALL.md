@@ -22,6 +22,8 @@ python3 -m venv .venv
 
 检查 `wecom-cli --version`（至少1.1.0）；没有 CLI 时先检查 Node/npm，并按官方 `@wecom/cli` 包完成安装，再复查版本与 `auth show --status`。已有可用 CLI 不默认升级，不重复初始化已授权 profile。自定义 profile 的隔离行为目前验过1.3.0，其他版本先验证，不把一套凭据误当多个 profile。
 
+已有绑定优先运行 `delivery/existing_entry.py`：按业务服务实际使用的 profile，通过只读 CLI 获取官方身份、过期证据和完整原始续期链接。详见 FIRST-RUN.md 第1步。`850003` 是权限过期，不能据此新建 profile、换 Bot 或要求扫码；桌面暂未找到 Bot 也不能触发初始化。原链接直接传给 onboard，不删除或改写客户端路由参数。
+
 不复用其他业务服务的依赖环境。若本机已有经系统授权的专用执行 Python，可在私有配置中明确填写其绝对路径，并如实记录复用；验收与正式任务必须使用同一个执行主体，不能把这种复测说成从空设备全新安装。
 
 配置、输入、聊天入口文本、诊断和验收记录全部放包外本机私有目录，建议 `~/.local/state/wecom-auth-keeper/<本机Bot配置名>/`（目录700、私有文件600）。本机实测相同 Python/脚本在 Documents 下的新日志目录启动返回78，改用 `~/.config` 下私有目录后成功；原因应按实际系统日志核查，不把它当成 AX 页面失败。若 runner 返回 gui_job_failed/78，先检查解释器与日志目录访问，使用常规私有运行目录重试，不改系统权限数据库。不要修改本机其他 Bot 的凭据、业务目录或常驻服务；先识别同 Bot 已有任务，避免重复安装。
@@ -61,6 +63,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 | 工具 | 用途及限制 |
 | --- | --- |
+| `existing_entry.py --cli ... --profile ... --output ...` | 复用已有 CLI，通过只读官方调用取得原始续期链接；不初始化、不读凭据、不发送，不能替代组织/私聊核验。 |
 | `gui.py --action inspect-expanded --python <绝对Python路径>`（无config） | 首次接入时读取原生组织菜单与可见Bot名称候选，不需要虚构Bot配置；只读、不导航、不授予权限。 |
 | `gui.py --action inspect` | 只读当前原生控件、通讯录 Bot 分组与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。通讯录只报告可见候选数量/位置，不声明列表完整或身份已验证。 |
 | `gui.py --action inspect-expanded` | 临时请求 AXEnhancedUserInterface，读回生效并恢复原值；不是系统辅助功能授权。 |

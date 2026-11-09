@@ -33,7 +33,8 @@ def main():
         cfg = json.loads(Path(args.config).read_text())
         result = prepare(cfg, args.message_output) if args.message_output else entry_status(cfg)
     except Exception as exc:
-        known = {'target_binding_incomplete', 'private_message_must_be_outside_release'}
+        known = {'target_binding_incomplete', 'private_message_must_be_outside_release',
+                 'invalid_authorization_url', 'cli_bot_identity_mismatch', 'official_authorization_url_required'}
         result = {'ok': False, 'sent': False,
                   'error': str(exc) if type(exc) is ValueError and str(exc) in known else 'entry_preparation_failed'}
     print(json.dumps(result, ensure_ascii=False))
