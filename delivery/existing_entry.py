@@ -80,20 +80,26 @@ def inspect_existing(cfg, output, *, run=subprocess.run):
             raise ValueError('cli_profile_changed')
         # Healthy scopes do not necessarily return a link. Do not send a
         # message or invent a failing write to manufacture an error response.
-        if response.get('errcode') != 850003:
+        errcode = response.get('errcode')
+        # A newly bound, already-created Bot may have no grant yet (850002).
+        # Reuse its official link too, but never call this state an expiry or
+        # silently grant it. Entry verification still requires an expiry baseline.
+        if errcode not in (850002, 850003):
             raise ValueError('official_authorization_url_unavailable')
         url = official_url(response, bot_id)
         report = {'schema_version': 1, 'cli_version': version[0],
                   'cli_config_dir': profile, 'cli_bot_id': bot_id, 'identity': identity,
                   'authorization_url': url, 'authorization_identity': authorization_identity(url),
                   'url_source': 'official_cli_message_sessions_help_message',
-                  'scope_status': {'消息': 'expired'}, 'errcode': 850003,
+                  'scope_status': {'消息': 'not_authorized' if errcode == 850002 else 'expired'},
+                  'authorization_baseline_required': errcode == 850002, 'errcode': errcode,
                   'organization_verified': False, 'desktop_identity_verified': False,
                   'private_chat_verified': False, 'renewal_verified': False}
         json.dump(report, stream, ensure_ascii=False, indent=2)
         stream.write('\n')
     return {'ok': True, 'status': 'official_entry_recovered', 'existing_binding_reused': True,
             'messages_sent': False, 'authorization_changed': False,
+            'authorization_baseline_required': errcode == 850002,
             'organization_verified': False, 'renewal_verified': False}
 
 

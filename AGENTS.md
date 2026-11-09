@@ -24,7 +24,11 @@ Installation order:
    An authorized default profile is only a candidate, never an automatic target.
    Expiry (`850003`), missing chat history, a renamed Bot or an unverified desktop
    identity never justifies `auth init`, a new profile or a QR code. Only a
-   genuinely missing binding with a confirmed new-setup request uses first-time setup.
+   genuinely missing target binding with a confirmed setup request uses first-time setup.
+   For an already-created API Bot, inspect its own official API configuration and
+   the CLI's manual setup option before requesting a QR scan. Existing credentials
+   may be handled locally for that authorized setup, never exposed to the model,
+   arguments or logs; never decrypt another profile or reset a Secret to fix navigation.
    Read the bound page's completed response before proceeding: a creator or
    organization rejection is an identity/access blocker, not a missing button.
    Preserve the existing binding; do not attempt to fix it by initializing again.

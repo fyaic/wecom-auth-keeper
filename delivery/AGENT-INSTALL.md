@@ -43,7 +43,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 正确身份命令是 `wecom-cli identity whoami`。只读 `auth show --status`、`auth show` 的 Bot ID 及身份结果；原始结果留在私有文件，不向公共报告输出 ID/URL。禁止读取、解密 `.encryption_key`、`credentials.enc`、Secret/token；这不能帮助定位组织。默认 profile 不自动等于业务目标；不同组织 Bot 名称相似或不同都正常，不能擅自换绑已有 CLI。
 
-若未绑定 Bot，按本机官方帮助完成独立 profile 的接入或创建。首次扫码、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
+若目标已创建但未找到对应绑定，按FIRST-RUN的专门分支复用该Bot现有API接入信息、准备独立profile；本机CLI支持`--manual`时不先要求扫码。目标凭据只在本机受控传给官方CLI，不进入模型/日志，不解密其他profile。首次扫码（确需时）、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
 
 `onboard.py --input <私有输入.json> --selection <成功选择记录.json> --output <新私有配置.json>`生成草稿。必填输入：bot_chat_name、organization_name、organization_selector_name、cli_bot_id、authorization_url、target_rows；可选cli_config_dir、wecom_cli、wecom_node。Bot身份、名称、原生组织、profile必须与选择记录一致，否则不写配置；旧部署配置不自动迁移。CLI/Node绝对路径用于后台精简PATH，在GUI launchd中复验。target_rows是用户明确需要的权限白名单，不因验收加权；organization_name保留业务企业名，organization_selector_name必须是本机实际菜单名。
 
@@ -68,7 +68,7 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 | 工具 | 用途及限制 |
 | --- | --- |
 | `select_target.py --target ... --profiles ... --output ...` | 根据用户指定Bot的原生官方身份匹配profile；无匹配或多匹配不自动选择默认项，不改变目标。 |
-| `existing_entry.py --selection ... --cli ... --output ...` | 只读取选择记录指定的profile，调用前重验Bot ID；不初始化、不读凭据、不发送。 |
+| `existing_entry.py --selection ... --cli ... --output ...` | 只读取选择记录指定的profile，调用前重验Bot ID；识别850002未授权与850003过期并保留原URL，不初始化、不授予权限、不读凭据、不发送。 |
 | `gui.py --action inspect-expanded --python <绝对Python路径>`（无config） | 首次接入时读取原生组织菜单与可见Bot名称候选，不需要虚构Bot配置；只读、不导航、不授予权限。 |
 | `gui.py --action inspect` | 只读当前原生控件、通讯录 Bot 分组与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。通讯录只报告可见候选数量/位置，不声明列表完整或身份已验证。 |
 | `gui.py --action inspect-expanded` | 临时请求 AXEnhancedUserInterface，读回生效并恢复原值；不是系统辅助功能授权。 |

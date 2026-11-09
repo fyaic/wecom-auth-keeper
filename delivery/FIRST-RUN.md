@@ -31,6 +31,16 @@ CLI已绑定但权限过期、昵称不同、暂时找不到Bot或私聊，都�
 
 首次创建、首次绑定、首次授予业务权限与“续期已有权限”分开记录。工具不能替没有权限的成员创建企业资源，不能扩大权限来让验收变绿。CLI profile、Bot、所属组织确认后，同一轮安装不再反复问用户“用哪个 Bot”。
 
+### 目标已创建，但本机尚未接入这个 Bot
+
+这是本轮远端测试设备的真实初始状态，不能改用其他已绑定的业务Bot。先完成第2步的官方身份核验，并保留`target_profile_not_found`与实际检查范围；它只说明目标配置尚未匹配。
+
+本机官方CLI 1.3.0的`auth init --help`提供`--manual`，可以使用已有Bot的Bot ID与Secret接入，**首次接入不等于必须扫码**。目标已是API模式时，安装Agent应先从该目标的官方“API配置”确认现有字段，而不是重建Bot、重置Secret或要求业务人员手抄凭据。
+
+用户已要求安装这个Bot且确认没有匹配绑定时，可以准备单独的新profile，不覆盖默认目录或业务服务配置。现有API凭据仅在本机受控进程中传给官方CLI；不进入Agent上下文、命令行参数、终端录屏、诊断输出或ZIP，不读取其他profile的加密凭据。首次接入所需的目标凭据处理与前面的只读配置盘点分开；盘点阶段仍禁止读取Secret。若必须新启用API、重置凭据或扩大权限，先展示具体操作并取得对应授权，不能用这些动作修复导航失败。
+
+手动接入的交互细节须按实际CLI验证：不能仅凭帮助文案假定普通stdin可用，也不能把Secret写进带回显的PTY日志。完成后用官方`auth show`与`identity whoami`重验新profile属于原目标，并重验原有profile未变；再重新运行profiles与select_target。**接入成功仍不是业务权限授权或续期成功。**
+
 ## 2. 确认组织与 Bot 身份，先不依赖聊天记录
 
 还没有 Bot 配置时也能诊断当前界面，不需要编造 ID。先在界面打开企业菜单或通讯录 Bot 列表，再使用本版本实际执行 Python：
@@ -54,7 +64,7 @@ python3 delivery/select_target.py --target /absolute/private/target.json --profi
 python3 delivery/existing_entry.py --selection /absolute/private/selection.json --cli /absolute/path/wecom-cli --node /absolute/path/node --output /absolute/private/existing-entry.json
 ```
 
-只有唯一ID匹配才返回`target_profile_selected`；无匹配是`target_profile_not_found`（仅代表已检查配置范围），多份匹配是`target_profile_ambiguous`，都不会自动选择默认项。existing_entry从selection指定的profile读取，并在业务只读调用前再次核对Bot ID；漂移返回`requested_target_mismatch`。若消息权限过期，从官方850003响应取完整原链接；健康权限未返回链接时保留已读到的官方UI入口，不制造写入错误取链。URL的type、原生参数和编码逐字保留，不重组为固定type=1。取链不代替创建者/组织/私聊核验。
+只有唯一ID匹配才返回`target_profile_selected`；无匹配是`target_profile_not_found`（仅代表已检查配置范围），多份匹配是`target_profile_ambiguous`，都不会自动选择默认项。existing_entry从selection指定的profile读取，并在业务只读调用前再次核对Bot ID；漂移返回`requested_target_mismatch`。若消息权限过期，从官方850003响应取完整原链接；已绑定但从未授予消息权限的850002同样可取官方链接，明确记录not_authorized与authorization_baseline_required，不自动首次授权。健康权限未返回链接时保留已读到的官方UI入口，不制造写入错误取链。URL的type、原生参数和编码逐字保留，不重组为固定type=1。取链不代替创建者/组织/私聊核验。
 
 5.0.13 可能恢复上次机器人子页面：先辨认“智能机器人”门户、“我的机器人”列表、“机器人详情”或权限弹窗，再决定下一步。切页后原生 AX 树可能需要重新请求展开；单纯保持 AXEnhancedUserInterface=true 不证明新树可读。`inspect-expanded` 是诊断手段，不能把搜索框里自己输入的 Bot 名称当作已找到 Bot。Bridge 的组织接口返回 success/缓存当前组织也不代替原生选中标记。
 

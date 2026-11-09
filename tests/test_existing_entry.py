@@ -41,6 +41,24 @@ class ExistingEntryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError,'official_authorization_url_unavailable'):
                 entry.official_url({'help_message':message},'fixture')
 
+    def test_new_bot_ungranted_scope_recovers_entry_without_becoming_a_renewal(self):
+        calls=[]
+        def run(args, **kwargs):
+            calls.append(args[1:])
+            out={('--version',):'wecom-cli 1.3.0', ('auth','show','--status'):'authorized',
+                 ('auth','show'):'Bot ID: fixture\n', ('identity','whoami'):'{}',
+                 ('message','aibot','sessions','list'):json.dumps({'errcode':850002,'help_message':URL})}[tuple(args[1:])]
+            return subprocess.CompletedProcess(args,1 if args[1]=='message' else 0,out,'')
+        with tempfile.TemporaryDirectory() as d, patch.object(entry,'executable',return_value='/cli'):
+            p=Path(d)/'entry.json'
+            result=entry.inspect_existing({'expected_bot_id':'fixture'},p,run=run)
+            report=json.loads(p.read_text())
+        self.assertTrue(result['authorization_baseline_required'])
+        self.assertFalse(result['authorization_changed']);self.assertFalse(result['renewal_verified'])
+        self.assertEqual(report['scope_status'],{'消息':'not_authorized'})
+        self.assertEqual(report['authorization_url'],URL)
+        self.assertFalse(any('init' in call or 'send' in call for call in calls))
+
     def test_url_rejects_blank_duplicate_identity_and_unsafe_components(self):
         for url in (URL+'&aibotid=', URL+'&str_aibotid=',URL.replace('fixture','%0Afixture'),
                     URL+'#fragment',URL.replace('https:','http:'),URL.replace('.com/','.com:bad/'),
