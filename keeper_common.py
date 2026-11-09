@@ -80,6 +80,14 @@ def load_config(path, *, probes=False):
         dest = Path(raw).expanduser()
         cfg[key] = str(dest if dest.is_absolute() else path.parent / dest)
     destinations = [Path(cfg[key]).resolve() for key in ("state_file", "log_file")]
+    if 'entry_receipt' in cfg:
+        raw = cfg['entry_receipt']
+        if not isinstance(raw, str) or not Path(raw).is_absolute() or not raw.strip():
+            raise KeeperError('invalid_config', 'entry_receipt must be an absolute private path', 3)
+        receipt = Path(raw).resolve()
+        if receipt in destinations or receipt == path or receipt in {
+                Path(cfg['state_file'] + suffix).resolve() for suffix in ('.pending.json', '.maintenance.json')} or receipt == Path(cfg['log_file'] + '.maintenance.log').resolve():
+            raise KeeperError('invalid_config', 'Entry receipt must not replace configuration, state or recovery', 3)
     if len(set(destinations)) != 2 or path in destinations:
         raise KeeperError("invalid_config", "Config, state and log must use distinct paths", 3)
     cfg["_config_path"] = str(path)

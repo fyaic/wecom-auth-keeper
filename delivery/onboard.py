@@ -7,6 +7,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import shutil
 import sys
 from urllib.parse import urlsplit, parse_qs
 
@@ -39,11 +40,18 @@ def configure(value, destination, system=None):
     if not isinstance(value, dict):
         raise ValueError('invalid_input')
     required = {'bot_chat_name', 'authorization_url', 'cli_bot_id', 'target_rows', 'organization_name'}
-    if not required <= set(value) or set(value) - required - {'cli_config_dir'}:
+    if not required <= set(value) or set(value) - required - {'cli_config_dir', 'organization_selector_name', 'wecom_cli'}:
         raise ValueError('invalid_input_fields')
     profile = value.get('cli_config_dir')
     if profile is not None and (not isinstance(profile, str) or not profile.strip() or not Path(profile).is_absolute()):
         raise ValueError('invalid_cli_profile')
+    selector = value.get('organization_selector_name')
+    if selector is not None and (not isinstance(selector, str) or not selector.strip()
+                                 or selector.startswith('<') or '\n' in selector):
+        raise ValueError('missing_identity_or_organization')
+    binary = value.get('wecom_cli') or shutil.which('wecom-cli')
+    if binary is not None and (not isinstance(binary, str) or not Path(binary).is_absolute()):
+        raise ValueError('invalid_cli_executable')
     for key in required - {'target_rows'}:
         if not isinstance(value[key], str) or not value[key].strip() or value[key].startswith('<') or '\n' in value[key]:
             raise ValueError('missing_identity_or_organization')
@@ -70,13 +78,19 @@ def configure(value, destination, system=None):
            'target_rows': rows, 'chat_history_navigation': True, 'bridge_send_link': False,
            'bridge_monitor': False, 'venv_python': str(ROOT / '.venv/bin/python3'),
            'state_file': str(state / 'state.json'), 'log_file': str(state / 'run.log'),
+           'entry_receipt': str(state / 'entry.json'),
            'renew_timeout': 600, 'lock_wait': 10,
            'maintenance': {'within_hours': 24, 'interval_seconds': 3600,
                            'min_renew_interval_seconds': 3600, 'retry_seconds': 300, 'close_window': True}}
     if profile is not None:
         cfg['cli_config_dir'] = profile
+    if binary:
+        # GUI launchd does not inherit the Agent terminal's Homebrew PATH.
+        cfg['wecom_cli'] = binary
     # Preserve declared business intent without enabling unverified navigation.
     cfg['expected_organization'] = value['organization_name']
+    if selector is not None:
+        cfg['organization_selector_name'] = selector
     # The version-gated organization adapter is opt-in after menu/device validation.
     # Keep its automatic switch off until this exact device has validated that path.
     destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
@@ -84,7 +98,7 @@ def configure(value, destination, system=None):
         os.chmod(destination, 0o600)
         json.dump(cfg, f, ensure_ascii=False, indent=2)
         f.write('\n')
-    return {'ok': True, 'status': 'configured_not_installed', 'permission_count': len(rows),
+    return {'ok': True, 'status': 'entry_preparation_required', 'permission_count': len(rows),
             'organization_switch': 'requires_device_validation', 'business_verified': False}
 
 
@@ -103,7 +117,7 @@ def main():
             'unsupported_automation_backend', 'invalid_input', 'invalid_input_fields',
             'missing_identity_or_organization', 'invalid_authorization_url', 'cli_bot_identity_mismatch',
             'invalid_permission_allowlist', 'private_config_must_be_outside_release',
-            'input_and_output_required_together', 'invalid_cli_profile'} else 'input_or_output_unavailable'
+            'input_and_output_required_together', 'invalid_cli_profile', 'invalid_cli_executable'} else 'input_or_output_unavailable'
         report, code = {'ok': False, 'error': known}, 3
     print(json.dumps(report, ensure_ascii=False))
     return code

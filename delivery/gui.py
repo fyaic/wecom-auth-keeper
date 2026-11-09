@@ -23,6 +23,7 @@ def command(action, python, config):
     entries = {'check': ('renew.py', '--check'), 'check-existing': ('renew.py', '--check'),
                'close': ('renew.py', '--close-window'),
                'maintain': ('maintain.py', None), 'discover': ('delivery/discover.py', None),
+               'entry-verify': ('delivery/verify_entry.py', None),
                'inspect': ('delivery/desktop_inspect.py', None),
                'inspect-expanded': ('delivery/desktop_inspect.py', '--expose-native-tree')}
     entry, flag = entries[action]
@@ -85,7 +86,7 @@ def run_once(action, config, evidence):
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--config', required=True)
-    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'check', 'check-existing', 'close', 'maintain'], required=True)
+    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'entry-verify', 'check', 'check-existing', 'close', 'maintain'], required=True)
     p.add_argument('--evidence-dir', required=True, help='New private directory outside the release')
     args = p.parse_args()
     try:

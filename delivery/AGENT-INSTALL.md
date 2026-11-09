@@ -1,121 +1,93 @@
 # 安装 Agent 执行协议
 
-适用 Codex、WorkBuddy 或其他具备本机终端/文件访问能力的 Agent。此文件描述软件安装流程，不授权替用户发送消息、上传诊断、创建业务数据或扩大 Bot 权限。用户明确要求优先。不要仅凭依赖安装、AX 可读或 exit 0 宣称续期成功。
+适用 Codex、WorkBuddy、Kimi Code 等具备本机文件、终端与界面操作能力的 Agent。**先按 [FIRST-RUN.md](FIRST-RUN.md) 完成首次接入，再运行日常续期。** 不假设业务设备已经有 Bot、已经知道正确组织、已经有私聊消息或授权入口。本文件不额外授权发送消息、扩大权限或修改其他服务；用户本次明确授权优先。
 
-## 0. 先核对包与设备，不操作 UI
+## 0. 校验包与本机环境
 
-- 检查维护者提供的 ZIP SHA-256；解压后运行 `python3 delivery/verify_bundle.py`（Windows 可用 `py -3`）。包内散列只检测损坏，不证明发布者身份。
-- 运行 `python3 delivery/onboard.py`。它只用标准库，Windows 不会导入 macOS 专用模块。没有 Python 时先说明需安装 Python 3.11+；在用户允许安装软件后用可信官方来源安装，不能远程下载后不检查就执行未知脚本。
-- macOS 读取企业微信安装路径、版本、CPU 架构；未识别版本写 unknown，不能猜。Windows 返回 unsupported_automation_backend：停止自动化安装，不安装 pyobjc，不生成 launchd 或伪造 Windows 计划任务成功。按 DESIGN.md 的 Windows 验收方案交维护者处理。
-- 只读检查现有 launchd 任务/配置，识别同一 Bot 是否已经在维护。不要启动重复作业或覆盖原配置。不要修改本机其他 Bot 的凭据、业务目录或常驻服务。
-
-## 1. 获取这台机器自己的身份和范围
-
-从业务请求取得目标企业、机器人及需要的能力；已经说明“本机现有 CLI Bot”时直接发现身份，不重复询问。利用本机已有 wecom-cli 的帮助、状态和身份查询确认当前 profile 的 Bot；CLI 命令随版本变化，先看本机 `--help`，不要猜参数，不自动 auth init 切换已在用的 Bot。
-
-身份仅使用 `wecom-cli auth show --status`、`wecom-cli identity whoami` 和 `auth show` 的 Bot ID 字段。原始结果写私有文件，向上下文仅输出所需名字/一致性布尔值。禁止读取、打印或解密 `.encryption_key`、`credentials.enc`、Secret/token；它们不能解决组织定位，且不属于续期安装输入。名称过时或组织未知时，下一步是桌面组织发现，不能研究凭据加密格式。
-
-如果用户明确要求维护“本机已经配置的 wecom-cli Bot”，指定 profile 的现有身份就是排查起点，不要求业务人员重新提供可以在本机查出的信息。当前打开的会话、当前选中企业、新建测试 Bot 都不能代替 CLI 目标。多组织设备应先读取企业切换菜单，核对 CLI 身份所属组织及该组织的机器人管理页面；必要时逐个核对本机已登录组织，再用权限页双 Bot ID 确认。不同组织出现不同 Bot 是正常情况，不能据此擅自换绑 CLI，也不能只在错误组织反复搜索后要求业务人员手工定位。名称不一致先检查组织、身份和页面，再判断是否改名。只有本机证据无法消除的歧义才问用户，并说明已核对了哪些组织及缺少什么。
-
-CLI 授权人与企业微信当前组织显示的人名不同也不能直接认定是不同账号：先检查组织内身份和目标官方页面。若遍历已登录组织仍找不到匹配 Bot，输出具体已查范围和身份未核实结果；不得把另一 Bot 的页面填入 CLI 配置，不得自动重新初始化现有 CLI。首次初始化一个新 Bot 与续期旧 Bot 是不同步骤，需要业务人员确认目标和权限范围。
-
-先运行包内只读盘点工具；它仅调用官方版本、授权状态和身份命令，不扫描凭据、不初始化 Bot。`--profile` 只填本机已知业务配置目录，可重复；默认 profile 始终单独核对。报告含本机身份，仅保存在包外私有目录，不能转发：
+校验维护者提供的 ZIP SHA-256，解压到固定版本目录，运行：
 
 ```bash
-python3 delivery/profiles.py --profile /absolute/known/cli-profile --output /absolute/private/profiles.json
+python3 delivery/verify_bundle.py
+python3 delivery/onboard.py
 ```
 
-只使用默认 profile 时省略 `--profile`。工具的 `ok=true` 只说明盘点完成，`target_selected=false` 和 `desktop_identity_verified=false` 必须由现场核对补齐。多个组织 / 多个 Bot 是正常情况：从业务使用的 CLI profile 出发，核对该 Bot 的组织和页面；默认 profile 不拥有优先权。如果另一个组织的 Bot 才是部署对象，使用它的既有独立 profile；尚未绑定则明确作为首次安装流程，不把它当作改名或要求覆盖默认 Bot。
+manifest 只检查包内容完整性，不证明发布者身份。需要 Python 3.11+；缺少时按用户授权从可信官方来源安装。macOS 检查实际客户端版本、CPU 架构、已有维护任务及实际运行 Python；Windows 当前返回 unsupported_automation_backend，没有 UIA 后端，不安装 pyobjc 或伪造计划任务成功。支持范围见 [DESIGN.md](DESIGN.md)，实际证据见 [VALIDATION.md](VALIDATION.md)。
 
-多 Bot 的 CLI 配置必须明确选择，不能只核对默认目录后声称覆盖了整台设备。CLI 1.3.0 实测支持 `WECOM_CLI_CONFIG_DIR=/absolute/private/profile`；先用 `auth show --status` 只读验证所选目录及默认配置没有混用，再在同一环境下执行身份查询和业务复查。此项在其他 CLI 版本上需要重新验证，不猜 profile 参数、不改 HOME、不复制 Secret。用户同意新增测试 Bot 时使用新建的独立目录；官方扫码绑定和首次业务权限确认仍是必要的一次性步骤，禁止覆盖旧配置或把它们算成自动续期已经完成。
+配置、输入、聊天入口文本、诊断和验收记录全部放包外本机私有目录。不要修改本机其他 Bot 的凭据、业务目录或常驻服务；先识别同 Bot 已有任务，避免重复安装。
 
-从用户指定 Bot 的官方权限页或本地已有 850003 帮助链接取得 authorization_url。只在指定 profile/业务日志内查找，不扫描整台电脑的凭据。不回显完整链接、Bot ID、聊天内容或认证数据。链接必须为官方 HTTPS 路径且同时包含两个 Bot 标识；其中 str_aibotid 必须和现场 CLI Bot ID 相同。机器人名字和企业文字仅作导航线索。
+## 1. 完成首次接入，不直接搜索不存在的历史
 
-在仓库/安装包目录外建立权限为 0700 的私有目录，在其中保存以下输入 JSON（0600）。下面是字段示意，必须替换成本机值：
+顺序固定：**目标企业与业务能力 → 选定/接入 Bot 与 CLI profile → 原生组织核验 → Bot 详情双身份核验 → 建立本机 Bot 私聊 → 发送或复用一次入口 → 离开会话后的后台找回。** 详细动作及失败回退见 FIRST-RUN.md。
 
-```json
-{
-  "bot_chat_name": "<本机目标机器人完整会话名>",
-  "organization_name": "<本机目标企业>",
-  "cli_config_dir": "/absolute/private/selected-cli-profile",
-  "authorization_url": "<本机官方权限链接>",
-  "cli_bot_id": "<刚刚从指定CLI profile核验的Bot ID>",
-  "target_rows": ["搜索与获取文档内容", "新建与编辑文档"]
-}
-```
-
-`cli_config_dir` 为可选字段：默认 profile 应省略，独立 profile 必须填写绝对路径；安装后所有身份/业务复查必须使用该值。不要依赖 Agent 进程继承的环境变量。
-
-权限目录在 `keeper_capabilities.py`。只选择用户业务需要的项；模板不是允许给所有权限授权。页面不能总是区分未授权与已过期，用户确认白名单也代表允许授予这些能力。无需索取 Secret。
-
-## 2. 配置 macOS（尚未安装服务）
-
-在包根目录建立专用虚拟环境并安装固定依赖：
+本机已有 CLI profile 只用官方命令盘点：
 
 ```bash
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements-macos.txt
-.venv/bin/python delivery/onboard.py --input /absolute/private/input.json --output /absolute/private/config.json
-.venv/bin/python renew.py --config /absolute/private/config.json --doctor
+python3 delivery/profiles.py --output /absolute/private/profiles.json
+# 有已知的其他 profile 时，增加 --profile /absolute/private/another-cli-profile
 ```
 
-输入及配置不得放进发布包或提交 Git。onboard 会拒绝重复文件、非官方 URL、CLI 身份不符及未知权限项；它核对的是输入数据的一致性，**不能代替 Agent 的现场身份查询**。输入文件用完按用户本地留存规则处理，不上传。
+正确身份命令是 `wecom-cli identity whoami`。只读 `auth show --status`、`auth show` 的 Bot ID 及身份结果；原始结果留在私有文件，不向公共报告输出 ID/URL。禁止读取、解密 `.encryption_key`、`credentials.enc`、Secret/token；这不能帮助定位组织。默认 profile 不自动等于业务目标；不同组织 Bot 名称相似或不同都正常，不能擅自换绑已有 CLI。
 
-生成配置默认每小时检查、提前24小时续期、最大600秒运行、最后关页。不会自动开启组织切换。先让用户/Agent在正确企业下验证目标 Bot；后台需跨组织时，才按下面一节启用。安装路径要固定，移动路径或换 Python 后需重新验收系统权限与任务。
+若未绑定 Bot，按本机官方帮助完成独立 profile 的接入或创建。首次扫码、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
 
-多组织安装先使用包内后台发现工具，不手写 launchd 探针或只相信 Bridge 的缓存企业名。先让企业微信处于“消息”视图；以下命令在实际 GUI launchd 中使用配置指定的 Python，完成后卸载临时任务，证据目录每次必须为新目录：
+`onboard.py --input <私有输入.json> --output <新私有配置.json>` 在取得正确官方入口后生成草稿。必填字段：bot_chat_name、organization_name、cli_bot_id、authorization_url、target_rows；可选 cli_config_dir、organization_selector_name 与 wecom_cli（绝对路径）。生成器会记录当前检测到的 CLI 绝对路径，GUI launchd 不依赖 Agent 终端的 PATH；未检测到时在配置中补充实际路径。target_rows 是用户需要维护的明确权限白名单，消息、文档、微盘、邮件等可多选，不因验收方便自动加权。organization_name 是业务企业名，organization_selector_name 是本机原生菜单实际名称，不能猜或用头像推断。
+
+草稿返回 `entry_preparation_required`，包含 entry_receipt 路径。`prepare_entry.py` 只生成准备发送的文本，sent=false 不代表已经发消息。安装 Agent 必须从已核验 Bot 详情进入正确私聊；首次没有会话不能仅重跑全局/历史搜索。收到发送授权后只发一次，然后本机读回核验。不默认使用群聊、他人私聊、文件传输助手或另一设备的历史。
+
+## 2. 后台入口验收与诊断
+
+安装 Agent 核对私聊类型并记录来源，关闭权限页、切到其他普通聊天或企业，然后运行：
 
 ```bash
-.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action discover --evidence-dir /absolute/private/discovery-1
+.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action entry-verify --evidence-dir /absolute/private/entry-check-1
 ```
 
-它逐个核对原生企业菜单和目标聊天，尝试读回已有官方入口，然后恢复原企业；不发送消息、不改授权。`chat_name_matched` 仅是名字候选，`link_identity_verified` 才表示发现双 Bot ID 匹配链接；即使 `ok=true`，`identity_review_required` 也不代表找到正确 Bot，更不代表续期通过。仅当唯一候选完成双身份核对，才填写 organization_selector_name 并启用 sidebar-5.0.13。未发现入口时按下一节核对机器人权限页、准备首次入口。必须保留每个组织的发现结果，不能只查当前企业就放弃。
+这是实际 GUI launchd 一次性任务，使用配置中的 Python，完成后卸载；不是每小时服务。成功表示所选 CLI、原生组织、目标聊天标题、链接双 ID、官方页面、全部配置权限可读与关页均通过。它不会发送、授权或改变 Bridge。私聊类型由安装 Agent 从已核验详情的进入路径确认，脚本不会把同名聊天当作类型证据。entry_receipt 是设备与配置绑定的本地安装记录，不是防篡改安全证明，也不是续期成功证明。
 
-发现失败时，`discovery` 中保留 `enumerated_organizations`、已尝试组织、`stage` 和 `cleanup`；主错误不会被恢复企业的错误覆盖。枚举到了五个企业不等于已经逐一核对五个企业的 Bot。连续遇到相同失败且现场条件未变时，应检查具体步骤、原生页面或管理入口，不能反复重跑后用次数代替覆盖证据。
+入口未准备好时维护/定时任务生成返回 bootstrap_incomplete；修好本步骤再继续。换目标、profile、组织、权限范围或执行 Python 路径后重新验证；不要删掉 entry_receipt 配置来绕过。已有旧配置保持原行为，不在正在运行的服务上强制迁移。
 
-无需临时编写 launchd 探针来观察当前页面。`gui.py --action inspect` 使用同一执行 Python，只读取当前原生控件、当前已展开的企业菜单，以及官方权限页与配置 Bot 是否匹配、授权控件支持的 AX actions。它不点击、不切企业、不打开权限页，不输出原始 URL/ID/聊天内容，允许在另一个 UI 服务运行时用于诊断；`ok=true` 只代表快照读取成功，不代表组织身份已验证、获得桌面独占或续期通过。示例：
+| 工具 | 用途及限制 |
+| --- | --- |
+| `gui.py --action inspect` | 只读当前原生控件与官方权限页；不导航、不调用 Bridge、不输出聊天/原始URL。 |
+| `gui.py --action inspect-expanded` | 临时请求 AXEnhancedUserInterface，读回生效并恢复原值；不是系统辅助功能授权。 |
+| `gui.py --action discover` | 仅适用于入口已经准备好后的跨组织查找；缺少私聊或入口时回首次接入，不反复执行。 |
+| `gui.py --action check-existing` | 只读已经打开且双ID匹配的页，不激活、不导航、不调用 Bridge；不能算自动找回。 |
+| `gui.py --action check` | 检查完整已有入口导航和权限；可能切换界面。检查后执行 close。 |
+| `gui.py --action close` | 只关闭当前双ID绑定权限页；不退出主窗口，不调用 Bridge，不用键盘/鼠标回退。 |
+| `gui.py --action maintain` | 正式维护入口，包含监督器、逐项续期与 finally 关页；不能绕过监督器使用内部 --worker。 |
 
-```bash
-.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action inspect --evidence-dir /absolute/private/inspection-1
-```
+每次 evidence-dir 使用新私有目录，保留实际进程输出与退出码。任务登记成功、HTTP200、空日志或 Agent 自述不能算验收。
 
-5.0.13 的机器人管理页可能肉眼可见，但普通 AX 树缺少页面内容。此时不要把空树判断成“没有机器人”，也不要反复尝试坐标。使用 `--action inspect-expanded`，它临时请求企业微信公开的 `AXEnhancedUserInterface` 原生辅助功能树，读回实际状态后再检查，退出时恢复原值；这不修改系统辅助功能授权、不激活窗口、不点击、不调用 Bridge。远端实测 setter 可能返回非零而属性已生效，因此以实际读回及 `native_tree_exposure.restored` 为准。若返回 `ax_exposure_unavailable`、`ax_exposure_failed` 或 `ax_exposure_restore_failed`，保留结果，不能假定已经展开/恢复。该工具仅诊断页面可见性，尚不能代替已验证的机器人管理页导航流程，也不能突破旧 Bridge 的桌面协调限制。
+5.0.13 原生管理页可能肉眼可见而 AX 标签为空；原生卡片还可能将标签合并进 AXTitle/AXDescription。inspect-expanded 只输出固定标签与精确/包含匹配，不把包含匹配直接当成可点击控件。切页后可能需要重新展开树，重复设置 true 不等于树刷新。必须区分门户/列表/详情/权限弹窗；管理列表只显示可管理的 Bot，不代表可使用的全部 Bot。
 
-原生卡片可能将标题和说明组合到一个 AX 属性中。inspect 会读取 AXTitle/AXValue/AXDescription/AXHelp，但只输出固定标签、来源属性和 `match=exact|contained`，不会输出组合文本；`contained` 仅代表观察到该语义，不能据此点击父卡片或其中的“授权”按钮。`main_window_sidebar_present` 表示检测到主窗口原生侧栏，不能把其中的权限弹窗当作独立窗口关闭。点击“机器人”标签还可能恢复上次的详情页；必须区分门户、管理列表、机器人详情和权限弹窗，不能仅因没有出现门户就重复点击。上述状态识别目前仍是诊断结论，完整管理路径尚未作为生产导航适配器发布。
+组织导航目前仅已知 5.0.13 中文适配器：准确企业菜单名、企业图标行、唯一 checkmark、切换后重新定位和验证。企业入口采用版本约束的相对窗口位置，不能外推其他版本/语言/布局。未知页面先诊断，不能硬套坐标。
 
-## 3. 企业与页面导航验收
+所有授权/取消授权/确认动作只来自双ID匹配 AXWebArea 的当前子树；窗口消失或控件脱离就停止，AXPress失败不退回坐标。内嵌权限页清理还要求原生AXSheet、唯一页面、可使用权限标题及已核验关闭布局；未知布局拒绝关闭主窗口。
 
-- 已经打开的权限页可用 `gui.py --action check-existing`（等同 `renew.py --check --existing-window`）只读检查。它核对双 Bot ID、读取权限及有效期，不激活窗口、不导航、不发送消息、不访问或切换 Bridge 模式，因此不要求 Bridge 提供桌面锁。没有匹配页即失败，不能拿它替代从其他会话开始的无人值守导航验收。
-- `gui.py --action close` 也不改 Bridge：只对当前双 ID 绑定的权限页执行已核验的关闭控件 AXPress，不用坐标或键盘回退。旧 Bridge 不支持协调时，仍可完成诊断后关页；这不表示授权修改或提前续期已经安全共存。带导航的 `check`、`maintain` 和授权修改仍保留原协调要求。
-- 所有授权、取消授权及确认动作必须来自匹配的 AXWebArea 子树；同一窗口其他页面/弹层的同名按钮不算目标。AXPress 不支持或失败时返回 `ax_press_failed`，不退到鼠标点击；控件已经离开页面时返回 `control_target_changed`。适配新客户端时应检查实际控件结构，不能通过启用坐标回退“修好”授权步骤。
+## 3. 系统权限与共用桌面
 
-- 先检查当前企业、目标 Bot 及权限页双身份。不要凭同名会话、头像坐标或页面标题直接授权。
-- 没有 Bridge 的设备保持 `bridge_monitor=false`，不为续期安装 Bridge。存在 Bridge 时，先核对同一登录用户的服务地址。支持共同桌面锁的 Bridge 配置为 `bridge_monitor=true`、`bridge_url` 和 `bridge_coordination="shared-lock-v1"`。该协议需要 Bridge 同时升级（见 `delivery/BRIDGE-COORDINATION.md`），不是只改 Keeper 的配置即可工作。Keeper 验证协议、用户、锁文件 inode 和组织重新核验能力后才开始；Bridge 轮巡、监控和 UI 请求在此期间自动让出桌面，关页后恢复。已有私聊入口必须先准备好；该模式不支持调用 Bridge 发入口链接。旧 Bridge 不支持时明确停止，禁止关闭检测、SIGSTOP 或手动暂停服务冒充无人值守通过。旧 observe 兼容路径仍保留，但不能证明独占桌面；启用组织轮巡时明确拒绝。`--worker` 只供监督器内部使用，正式任务使用不带该参数的 `maintain.py`。
-- 默认将续期入口保存在**当前部署设备上、当前企业账号与目标 Bot 的私聊消息**中。先核对当前 CLI profile、官方授权链接的双 Bot ID 和目标机器人；不要复制其他设备/机器人的链接，不用群聊、他人的私聊或文件传输助手作为默认入口。
-- 首次没有链接时，说明需要一次“入口准备”。用户授权后只向已核对的目标 Bot 私聊发送一次官方链接；用户也可自行发送。发送后必须在这台设备的私聊历史中读回、匹配双 Bot ID，再关闭权限页，从其他会话重新运行完整后台导航。其他设备上能看到消息、或当前权限页已打开，都不能代替此设备的后台验收。日常续期只查找已有入口，不反复发消息。
-- Bot 显示名可能被改名，CLI 本地缓存名称不能代替最新现场身份。名称不符时先核对官方页面/链接的双 Bot ID，再更新本机导航名称；不能凭“看起来像测试 Bot”就更换目标。
-- 5.0.13 曾出现聊天消息懒加载，首次需打开聊天让链接渲染。对新布局应观察 AX 结构并与预期比对；未知结构停止。5.0.13 的企业入口 AX 坐标失真，专用适配器只在已核对版本和主窗口后使用相对侧栏位置打开菜单，再用原生企业行及选中标记核验；其他版本不能沿用此入口。
-- 先运行 `renew.py --check` 获取完整权限和日期；该命令可能导航/切换前台但不改授权。用 finally 调用 `renew.py --close-window`。
-- 管理页打开的权限弹窗可能嵌在企业微信主窗口内，和从私聊链接打开的独立权限窗口不同。`--close-window` 始终先核对配置 Bot 双身份。对已实测的5.0.13中文内嵌页，必须同时匹配原生AXSheet、唯一官方页面、“可使用权限”标题及空白关闭按钮的完整相对布局，才按弹窗内部按钮并验证页面消失、主窗口保留；不使用主窗口红色关闭按钮。其他版本、布局变化或多个候选返回 `embedded_page_close_unavailable`，不能强行关闭主窗口。这个关闭组件已单独实测；仍须按最终日常私聊入口完成该设备完整续期验收。
-- 5.0.13 中文版跨企业时，在私有配置加入 `"organization_navigation": "sidebar-5.0.13"` 和 `"organization_selector_name": "<企业切换菜单中的准确名称>"`。菜单简称可能和企业全称不同。必须先现场读菜单核对，不猜名称。旧 organization_name/organization_markers 不再触发头像启发式切换。
-- 此适配器用企业图标识别菜单行，精确唯一名称选择，重新打开菜单验证当前选中项。切换会重建主窗口，脚本重新定位；聊天提及企业名不算当前企业证据。版本不匹配、重名、没有选中标记则停止。该功能须用真正后台启动链测试“别的企业 → 目标企业 → 权限页 → 关页”，再启用定时任务。
+辅助功能必须属于正式执行的那个 Python。终端可操作不证明 launchd 子进程可操作；SSH 检查失败也不证明 GUI launchd 失败。使用同用户的 gui.py 临时任务验证。必要时通过正常系统设置授权真实执行主体，不修改 TCC、不借用其他应用绕过，也不要求给 sshd 额外授权。
 
+普通没有其他 UI 服务的 Mac 不需要安装 Bridge。已运行 Bridge 的设备先识别真实服务，不能为了续期自行停止、升级或改其模式。支持共同桌面锁时按 [BRIDGE-COORDINATION.md](BRIDGE-COORDINATION.md) 配置并验证协议、uid、锁文件 inode 及交接刷新；旧 Bridge 的 observe 模式不能停止组织轮巡。用户拒绝更新/停止的约束持续有效，不重复索取同一权限或用 SIGSTOP 绕过。
 
-## 4. 实际后台链路与续期分层验收
+旧 Bridge 的组织API success与缓存 current_org 不证明当前页面组织，普通切换API还可能触发自动回到主组织。首次接入可做有界的导航核验，但不代表正式授权修改获得桌面独占；完整维护路径仍按协调要求执行。不要把入口准备缺失和并发协调失败混为一个问题。
 
-1. **配置层**：doctor/字段校验，只说明依赖和配置可用。
-2. **桌面检查层**：相同登录用户、Python 和启动链读取目标权限及日期、干净关页。终端的权限不能证明 launchd 子进程有辅助功能权限。让用户在系统设置对真实执行主体授权；不修改 TCC、不重置全局授权、不借用其他程序绕过检查。
-   远程终端/SSH 仅负责安装和读取结果。SSH 链的 AX 检查失败不能证明用户桌面的 launchd Python 也失败；应使用该登录用户的 GUI launchd 临时任务运行同一个 Python，核对实际 AX 信任及读页结果，完成后卸载临时任务。不要为了方便 SSH 调试要求额外授予 sshd 辅助功能。系统权限设置完成后，重新从普通聊天/其他组织开始验收，不能由安装 Agent 预先打开权限页替代完整导航。
-3. **真实续期层**：对已确认白名单中的临近到期项运行 `maintain.py --config ...`。记录每项前后日期、pending 为 false、关页成功，并用同 Bot 的只读业务调用复查。业务写验证或发消息需用户另行授权。健康但未到阈值的检查只算检查通过。
-4. **提前验收（可选）**：如用户明确同意现在取消/重授一次，可用隔离配置/状态临时设 within_hours=168，只针对同意的权限。验收后恢复生产24小时，不让168小时进入生产任务。没有到期项、也没有该授权时，标记 renewal_pending；到自然窗口后观察真实续期，不能虚报完成。
+## 4. 真实续期与定时触发分开验收
 
-以上后台命令统一用 `delivery/gui.py --config ... --action check|close|maintain --evidence-dir <新的私有目录>`，每次只选一个 action。`maintain` 调用完整生产入口，不绕过监督器。`check` 后必须执行 `close`；`maintain` 自带 finally 关页。工具返回实际进程退出码与原始脚本结果，临时任务不会设置每小时调度。不要把任务登记成功、空日志、轮询 `launchctl print` 仍存在或模型文字结论当成完成。
+入口完成后运行 `gui.py --action maintain` 验证所选已有权限。默认每小时检查、提前24小时逐项续期，完成自动关页。记录每项前后到期日、pending=false、关页结果，再用同 Bot 的必要只读业务调用核验。未授权新权限要先按用户确认范围完成首次授权，单独记录。
 
-记录 `delivery/acceptance.example.json` 的副本到私有目录。只填实际证据。schema_version=2 将身份拆为四项：cli_profile_verified 只代表选定了正确 CLI 配置，cli_url_identity_verified 只代表 CLI 与官方链接一致；desktop_organization_verified 和 desktop_bot_identity_verified 必须来自这台设备的桌面核验。前两项不能代替后两项。release_commit 从当前 MANIFEST.json 读取，不留空；scheduled_run_verified 必须有实际定时入口执行证据；runtime_human_or_agent_clicks 记录运行期间是否代点，人工/模型代点成功不能算无人值守续期。`entry_location` 记录实际入口位置；`entry_identity_verified` 记录私聊链接双身份核对；`entry_reopened_from_other_chat` 必须来自关页、切到其他会话后的后台重新导航结果，不能用当前打开的页面替代。多权限至少检查所有白名单项；某项成功不等于所有项成功。已有一个 Bot 的验收不能代表其他 Bot 或其他系统版本。
+健康但未到阈值只算检查通过。用户已明确同意提前做一次取消/重授时，可以隔离验收配置临时设 within_hours=168，验收后恢复24小时；不要为得到绿色结果扩大白名单或写业务数据。正式定时安装前至少通过：
 
-## 5. 安装、观察、升级、卸载
+1. 本设备从其他聊天/组织找回私聊入口，并关闭页面。
+2. 纯脚本实际续期、全部目标项有效期确实延长；运行期间无人/Agent代点。
+3. 同一正式执行 Python、GUI launchd 启动链通过，清理与异常恢复可复核。
+4. 临时定时任务真正触发一次；登记成功或手工 kickstart 不代替自然触发。
 
-确认用户要启用定时任务且无同 Bot 的重复任务，再运行：
+使用 acceptance.example.json 的私有副本（schema_version=3）分别记录首次接入、入口、续期、定时结果，release_commit 从 manifest 读取。bootstrap.private_chat_opened_from_verified_bot 必须由安装 Agent 实际观察；entry-verify 的标题/链接结果不能替代。任一 Bot/设备通过不代表其他设备或 Windows 通过。
+
+## 5. 安装、升级和卸载
+
+完整验收通过、无重复任务且用户要求启用后：
 
 ```bash
 .venv/bin/python maintain.py --config /absolute/private/config.json --write-launchagent /absolute/private/job.plist
@@ -123,12 +95,12 @@ plutil -lint /absolute/private/job.plist
 launchctl bootstrap "gui/$(id -u)" /absolute/private/job.plist
 ```
 
-生成器默认 RunAtLoad，会立即执行真实维护，所以在加载前完成范围和后台授权检查。保留 job.plist 的固定路径；写出实际 Label（从 plist 读取，不猜）、日志位置、卸载命令。加载成功只代表任务已登记，必须读它的运行输出确认没有权限/导航错误。`--status` 是历史状态，不是存活或实时授权证明。
+RunAtLoad 会立即执行真实维护，加载后读取运行结果。记录实际 Label、日志和停止方法：
 
 ```bash
 launchctl bootout "gui/$(id -u)" /absolute/private/job.plist
 ```
 
-升级使用新版本目录，不覆盖正在执行的文件；先停止该 Bot 的旧任务、保留原配置/状态/版本，再验证新版本并启用。保留 pending 与 maintenance 状态；配置身份不匹配时停止，不直接删除状态清错。失败则停新任务，恢复旧路径和配置，不能同时启用两套维护。
+升级用新版本目录，保留旧配置、状态、pending与回滚路径，不覆盖执行中的文件或同时启动两套服务。失败时停止新任务恢复旧版本，不删除 pending 清错。设备休眠、锁屏、退出账号、重启未登录会影响定时执行；客户端升级后重新验收。
 
-至少观察一个正常检查周期和一次真正续期。设备休眠、锁屏、退出账号、系统重启未登录均可能错过窗口。输出一份简短中文结论：已配置范围、系统/客户端版本、任务是否运行、哪些验收通过、尚缺什么、出现问题怎么停止。默认不自动联系维护者、不上传原始 AX/聊天/日志。原 scripts/inspect_compat.py 会输出原始文本和 URL，本分发包有意不包含它。
+给业务人员简短报告：维护哪个组织/Bot/哪些权限，入口准备、真实续期、定时运行各是否通过，以及怎么停止。默认不联系别人、不上传聊天/AX/凭据或原始日志。当前包仍是内部候选，未通过远端真实续期前不能发布为“Mac通用可用版”。

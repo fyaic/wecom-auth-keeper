@@ -11,6 +11,7 @@ import sys
 from keeper_capabilities import CAPABILITY_GROUPS
 from keeper_common import KeeperError, atomic_json, emit_error, executable, gui_lock_path, load_config, process_lock
 from keeper_maintenance import policy, read_state, run_cycle
+from keeper_bootstrap import require_entry
 from renew import Renewal, monitor_guard
 
 
@@ -18,17 +19,22 @@ def validate_destinations(cfg):
     paths = [Path(cfg[key]).resolve() for key in ("_config_path", "state_file", "log_file")]
     paths += [Path(cfg["state_file"] + suffix).resolve() for suffix in (".pending.json", ".maintenance.json")]
     paths.append(Path(cfg["log_file"] + ".maintenance.log").resolve())
+    if cfg.get('entry_receipt'):
+        paths.append(Path(cfg['entry_receipt']).resolve())
     if len(set(paths)) != len(paths):
         raise KeeperError("invalid_config", "Configuration, evidence, recovery and schedule files must be distinct", 3)
 
 
 def write_launchagent(cfg, output):
     validate_destinations(cfg)
+    require_entry(cfg)
     settings = policy(cfg)
     output = Path(output).expanduser().absolute()
     forbidden = {Path(cfg[key]).resolve() for key in ("_config_path", "state_file", "log_file")}
     forbidden.update(Path(cfg["state_file"] + suffix).resolve() for suffix in (".pending.json", ".maintenance.json"))
     forbidden.add(Path(cfg["log_file"] + ".maintenance.log").resolve())
+    if cfg.get('entry_receipt'):
+        forbidden.add(Path(cfg['entry_receipt']).resolve())
     if output.resolve() in forbidden:
         raise KeeperError("invalid_output", "LaunchAgent must not replace configuration or state", 3)
     python = executable(cfg.get("venv_python"), sys.executable)
@@ -52,6 +58,7 @@ def write_launchagent(cfg, output):
 
 
 def supervise(cfg, *, run=subprocess.run):
+    require_entry(cfg)
     # The parent keeps ownership through worker termination and cleanup. A killed
     # worker cannot run its finally block, so it cannot own monitor restoration.
     with process_lock(gui_lock_path(), cfg["lock_wait"]) as lock_fd:

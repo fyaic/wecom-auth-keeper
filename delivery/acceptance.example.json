@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "release_commit": null,
   "os": null,
   "client_version": null,
@@ -24,5 +24,15 @@
   "desktop_organization_verified": false,
   "desktop_bot_identity_verified": false,
   "scheduled_run_verified": false,
-  "runtime_human_or_agent_clicks": null
+  "runtime_human_or_agent_clicks": null,
+  "bootstrap": {
+    "target_bot": "not_selected",
+    "cli_binding": "not_verified",
+    "organization_mapping": "not_verified",
+    "private_chat_opened_from_verified_bot": false,
+    "private_chat_evidence": null,
+    "link_preparation": "not_prepared",
+    "entry_receipt": "not_verified",
+    "first_permission_grant": "not_performed"
+  }
 }

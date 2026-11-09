@@ -19,7 +19,7 @@ from keeper_organization import menu_rows
 from renew import Renewal, target_url
 
 NATIVE_LABELS = {'消息', '机器人', '智能机器人', '管理机器人', '我的机器人', '机器人详情', '管理', '去管理', '去使用', '详情', '可使用权限',
-                 '查找聊天记录', '关闭聊天记录'}
+                 '查找聊天记录', '关闭聊天记录', '查看更多机器人', '机器人资料', '发消息'}
 PERMISSION_LABELS = {'授权', '已授权', '取消授权', '确认', '确定', '同意', '重新授权'}
 
 

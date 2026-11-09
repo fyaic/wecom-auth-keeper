@@ -6,6 +6,7 @@ import math
 from pathlib import Path
 
 from keeper_common import KeeperError, atomic_json, emit_error
+from keeper_bootstrap import require_entry
 from renew import Renewal, monitor_guard
 
 DEFAULT_POLICY = {"within_hours": 24, "interval_seconds": 3600,
@@ -87,6 +88,7 @@ def observe(engine, window):
 
 def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
     """Caller holds the shared desktop lock across this entire cycle, including cleanup."""
+    require_entry(cfg)
     settings = policy(cfg)
     engine = engine or Renewal(cfg, ax)
     path = Path(cfg["state_file"] + ".maintenance.json")
