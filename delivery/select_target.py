@@ -16,8 +16,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from keeper_bootstrap import authorization_identity
 
+_NO_PROFILE_CHOICE = object()
 
-def select(target, inventory):
+
+def select(target, inventory, *, profile_choice=_NO_PROFILE_CHOICE):
     if not isinstance(target, dict) or target.get('selection_source') not in {'user_request', 'business_service'}:
         raise ValueError('explicit_target_required')
     if target.get('identity_source') != 'native_selected_bot_permission_page':
@@ -44,6 +46,19 @@ def select(target, inventory):
         raise ValueError('invalid_profile_inventory')
     matches = [r for r in profiles if r.get('status') == 'authorized'
                and r.get('cli_bot_id') == identity['str_aibotid']]
+    identity_matching_profile_count = len(matches)
+    choice_source = 'unique_identity_match' if len(matches) == 1 else 'not_selected'
+    if profile_choice is not _NO_PROFILE_CHOICE:
+        if profile_choice is not None and (not isinstance(profile_choice, str)
+                or not profile_choice.strip() or not Path(profile_choice).is_absolute()):
+            raise ValueError('profile_must_be_absolute')
+        # A user's profile choice only narrows already identity-matched official
+        # inventory entries. It never changes the requested Bot or manufactures
+        # a missing/unauthorized profile, including when choosing the default.
+        matches = [r for r in matches if r['cli_config_dir'] == profile_choice]
+        if not matches:
+            raise ValueError('requested_profile_not_matching_target')
+        choice_source = 'explicit_default' if profile_choice is None else 'explicit_profile'
     status = ('target_profile_selected' if len(matches) == 1 else
               'target_profile_ambiguous' if matches else 'target_profile_not_found')
     report = {'schema_version': 1, 'ok': len(matches) == 1, 'status': status,
@@ -51,6 +66,8 @@ def select(target, inventory):
               'bot_chat_name': target['bot_chat_name'], 'organization_selector_name': target['organization_selector_name'],
               'authorization_url': target['authorization_url'], 'authorization_identity': identity,
               'profiles_checked': len(profiles), 'matching_profile_count': len(matches),
+              'identity_matching_profile_count': identity_matching_profile_count,
+              'profile_choice_source': choice_source,
               'inventory_scope': 'explicit_profiles_only', 'requested_target_changed': False,
               'desktop_creator_verified': False, 'renewal_verified': False}
     if len(matches) == 1:
@@ -64,12 +81,17 @@ def main():
     p.add_argument('--target', required=True, help='Private user-intent/native Bot evidence JSON')
     p.add_argument('--profiles', required=True, help='Private profiles.py inventory JSON')
     p.add_argument('--output', required=True, help='New private selection JSON outside release')
+    choice = p.add_mutually_exclusive_group()
+    choice.add_argument('--profile', help='Explicitly choose an inventoried matching profile by absolute path')
+    choice.add_argument('--default-profile', action='store_true', help='Explicitly choose the inventoried default profile')
     args = p.parse_args()
     try:
         output = Path(args.output).expanduser().resolve()
         if output == ROOT or ROOT in output.parents:
             raise ValueError('private_report_must_be_outside_release')
-        result = select(json.loads(Path(args.target).read_text()), json.loads(Path(args.profiles).read_text()))
+        profile_choice = None if args.default_profile else args.profile if args.profile is not None else _NO_PROFILE_CHOICE
+        result = select(json.loads(Path(args.target).read_text()), json.loads(Path(args.profiles).read_text()),
+                        profile_choice=profile_choice)
         output.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         with output.open('x', encoding='utf-8') as f:
             os.chmod(output, 0o600)
@@ -79,7 +101,8 @@ def main():
                                         'requested_target_changed', 'renewal_verified')}
     except Exception as exc:
         known = {'explicit_target_required', 'selected_bot_ui_identity_required', 'invalid_authorization_url',
-                 'profile_inventory_requires_refresh', 'invalid_profile_inventory', 'private_report_must_be_outside_release'}
+                 'profile_inventory_requires_refresh', 'invalid_profile_inventory', 'private_report_must_be_outside_release',
+                 'profile_must_be_absolute', 'requested_profile_not_matching_target'}
         public = {'ok': False, 'error': str(exc) if type(exc) is ValueError and str(exc) in known else 'target_selection_failed'}
     print(json.dumps(public, ensure_ascii=False))
     return 0 if public['ok'] else 3

@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from contextlib import contextmanager
 import io
 import json
 from pathlib import Path
@@ -146,8 +147,8 @@ class MaintenanceTests(Fixture):
         ax, engine = self.setup_cycle(['发送消息'])
         self.cfg['maintenance'] = {'within_hours': 168}
         original = engine.pre_renew
-        def crash(*args):
-            original(*args)
+        def crash(*args, **kwargs):
+            original(*args, **kwargs)
             raise KeyboardInterrupt()
         with patch.object(engine, 'pre_renew', side_effect=crash):
             with self.assertRaises(KeyboardInterrupt): self.cycle(ax, engine)
@@ -161,7 +162,10 @@ class MaintenanceTests(Fixture):
 
     def test_unresolved_intent_does_not_issue_another_revocation(self):
         ax, engine = self.setup_cycle(['发送消息'])
-        with patch.object(engine, 'pre_renew', side_effect=RuntimeError('private')):
+        def unknown(*args, before_revoke):
+            before_revoke()
+            raise RuntimeError('private')
+        with patch.object(engine, 'pre_renew', side_effect=unknown):
             self.assertEqual(self.cycle(ax, engine)[1], 2)
         self.wall += timedelta(minutes=6)
         result, code = self.cycle(ax, engine)
@@ -279,6 +283,76 @@ class MaintenanceTests(Fixture):
             self.assertEqual(code,2)
             self.assertFalse(result['ok'])
 
+    def test_abnormal_worker_replaces_old_healthy_state_and_cleans_up(self):
+        self.cfg['venv_python'] = sys.executable
+        for failure, closed in [(subprocess.TimeoutExpired(['worker'], 1), True),
+                                (subprocess.CompletedProcess([], -11, '', ''), False)]:
+            atomic_json(self.cfg['state_file'], {'ok': True, 'status': 'healthy'})
+            Path(self.cfg['state_file'] + '.pending.json').write_text('{}')
+            runner = Mock(side_effect=[failure, subprocess.CompletedProcess(
+                [], 0, json.dumps({'ok': True, 'closed': closed}), '')])
+            with patch('maintain.gui_lock_path', return_value=self.root / 'desktop.lock'):
+                result, code = maintain.supervise(self.cfg, run=runner)
+            self.assertEqual(code, 2)
+            self.assertFalse(result['ok'])
+            self.assertEqual(result['cleanup'], {'ok': True, 'closed': closed})
+            self.assertTrue(result['pending_recovery'])
+            self.assertIn('checked_at', result)
+            self.assertEqual(json.loads(Path(self.cfg['state_file']).read_text()), result)
+            self.assertIn('--cleanup-worker', runner.call_args_list[1].args[0])
+            self.assertEqual(runner.call_args_list[1].kwargs['timeout'], 30)
+            self.assertEqual(runner.call_args_list[0].kwargs['pass_fds'],
+                             runner.call_args_list[1].kwargs['pass_fds'])
+
+    def test_abnormal_cleanup_failure_never_claims_page_closed(self):
+        self.cfg['venv_python'] = sys.executable
+        runner = Mock(side_effect=[subprocess.CompletedProcess([], -11, '', ''),
+                                  subprocess.TimeoutExpired(['cleanup'], 30)])
+        with patch('maintain.gui_lock_path', return_value=self.root / 'desktop.lock'):
+            result, code = maintain.supervise(self.cfg, run=runner)
+        self.assertEqual((code, result['cleanup']), (2, {'ok': False}))
+        self.assertFalse(json.loads(Path(self.cfg['state_file']).read_text())['ok'])
+
+    def test_normal_worker_failure_keeps_its_cleanup_without_duplicate_attempt(self):
+        self.cfg['venv_python'] = sys.executable
+        failure = {'ok': False, 'mode': 'maintenance', 'status': 'failed',
+                   'error': 'renew_failed', 'cleanup': {'ok': True, 'closed': True}}
+        runner = Mock(return_value=subprocess.CompletedProcess([], 2, json.dumps(failure), ''))
+        with patch('maintain.gui_lock_path', return_value=self.root / 'desktop.lock'):
+            result, code = maintain.supervise(self.cfg, run=runner)
+        self.assertEqual((code, result['cleanup']), (2, failure['cleanup']))
+        runner.assert_called_once()
+        self.assertEqual(json.loads(Path(self.cfg['state_file']).read_text()), result)
+
+    def test_outer_restore_failure_overrides_success_but_retains_row_evidence(self):
+        self.cfg['venv_python'] = sys.executable
+        success = {'ok': True, 'mode': 'maintenance', 'status': 'renewed',
+                   'rows': {'发送消息': {'action': 'pre_renewed'}},
+                   'cleanup': {'ok': True, 'closed': True}}
+        @contextmanager
+        def guard(cfg):
+            yield
+            raise KeeperError('monitor_restore_failed', 'restore failed')
+        runner = Mock(return_value=subprocess.CompletedProcess([], 0, json.dumps(success), ''))
+        with patch('maintain.gui_lock_path', return_value=self.root / 'desktop.lock'), \
+             patch('maintain.monitor_guard', guard):
+            result, code = maintain.supervise(self.cfg, run=runner)
+        self.assertEqual((code, result['status']), (2, 'monitor_restore_failed'))
+        self.assertFalse(result['ok'])
+        self.assertEqual(result['rows'], success['rows'])
+        self.assertEqual(result['cleanup'], success['cleanup'])
+        self.assertEqual(json.loads(Path(self.cfg['state_file']).read_text()), result)
+
+    def test_lock_contender_cannot_overwrite_running_owners_state(self):
+        saved = {'ok': True, 'status': 'healthy', 'checked_at': '2026-11-09T12:00:00'}
+        atomic_json(self.cfg['state_file'], saved)
+        runner = Mock()
+        with patch('maintain.process_lock', side_effect=KeeperError('lock_busy', 'busy', 4)):
+            with self.assertRaises(KeeperError):
+                maintain.supervise(self.cfg, run=runner)
+        runner.assert_not_called()
+        self.assertEqual(json.loads(Path(self.cfg['state_file']).read_text()), saved)
+
     def test_discovery_needs_no_account_or_gui(self):
         result=subprocess.run([sys.executable,str(Path(maintain.__file__)),'--list-capabilities'],
                               capture_output=True,text=True,check=True)
@@ -307,3 +381,85 @@ class MaintenanceTests(Fixture):
             result,code=self.cycle(ax,engine)
         self.assertEqual(code,2)
         self.assertIn('intent',self.scheduler()['permissions']['发送消息'])
+
+    def test_interrupted_preparation_reopens_page_before_retrying(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        prepare = engine.prepare_revoke
+        def interrupted(*args):
+            prepare(*args)  # Confirmation is open, but final revoke is unattempted.
+            raise KeyboardInterrupt()
+        with patch.object(engine, 'prepare_revoke', side_effect=interrupted):
+            with self.assertRaises(KeyboardInterrupt):
+                self.cycle(ax, engine)
+        self.assertEqual(self.scheduler()['permissions']['发送消息']['intent']['phase'], 'preparing')
+        self.assertFalse(engine.journal.exists())
+        self.assertEqual(ax.states['发送消息'], 'authorized')
+        self.assertIsNotNone(ax.confirm)
+        prior_clicks = len(ax.clicks)
+        def closed():
+            if ax.confirm:
+                self.assertEqual(len(ax.clicks), prior_clicks)
+            ax.confirm = ax.menu = None
+            ax.refresh()
+            return {'ok': True, 'closed': True}, 0
+        engine.close_window = Mock(side_effect=closed)
+        self.wall += timedelta(minutes=6)
+        with patch.object(engine, 'open', wraps=engine.open) as opened:
+            result, code = self.cycle(ax, engine)
+        self.assertEqual((code, result['rows']['发送消息']['action']), (0, 'pre_renewed'))
+        self.assertEqual(opened.call_count, 2)
+        self.assertEqual(engine.close_window.call_count, 2)
+        self.assertNotIn('intent', self.scheduler()['permissions']['发送消息'])
+        self.assertFalse(engine.journal.exists())
+
+    def test_legacy_and_revoking_intents_remain_unresolved_without_pending(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        old = engine.read_rows(ax.window)['发送消息']['expiry'].isoformat(timespec='minutes')
+        for phase in (None, 'revoking'):
+            intent = {'expiry_before': old, 'started_at': self.wall.timestamp()}
+            if phase:
+                intent['phase'] = phase
+            atomic_json(self.cfg['state_file'] + '.maintenance.json', {
+                'version': 1, 'identity': engine.identity, 'failures': 0, 'next_retry_at': 0,
+                'permissions': {'发送消息': {'intent': intent}}})
+            result, code = self.cycle(ax, engine)
+            self.assertEqual((code, result['error']), (2, 'action_outcome_unknown'))
+            self.assertEqual(ax.clicks, [])
+            self.assertIn('intent', self.scheduler()['permissions']['发送消息'])
+
+    def test_preparing_retry_keeps_intent_if_scope_changes_during_reopen(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        old = engine.read_rows(ax.window)['发送消息']['expiry'].isoformat(timespec='minutes')
+        atomic_json(self.cfg['state_file'] + '.maintenance.json', {
+            'version': 1, 'identity': engine.identity, 'failures': 0, 'next_retry_at': 0,
+            'permissions': {'发送消息': {'intent': {'expiry_before': old,
+                'started_at': self.wall.timestamp(), 'phase': 'preparing'}}}})
+        def changed():
+            ax.dates['发送消息'] += timedelta(hours=1)
+            ax.refresh()
+            return {'ok': True, 'closed': True}, 0
+        engine.close_window.side_effect = changed
+        result, code = self.cycle(ax, engine)
+        self.assertEqual((code, result['error']), (2, 'action_outcome_unknown'))
+        self.assertEqual(ax.clicks, [])
+        self.assertIn('intent', self.scheduler()['permissions']['发送消息'])
+
+    def test_revoking_phase_storage_failure_prevents_final_cancel(self):
+        ax, engine = self.setup_cycle(['发送消息'])
+        real_save = atomic_json
+        rejected = False
+        def save(path, data):
+            nonlocal rejected
+            intent = data.get('permissions', {}).get('发送消息', {}).get('intent', {})
+            if intent.get('phase') == 'revoking' and not rejected:
+                rejected = True
+                raise OSError('fixture storage failure')
+            real_save(path, data)
+        with patch('keeper_maintenance.atomic_json', side_effect=save):
+            result, code = self.cycle(ax, engine)
+        self.assertEqual(code, 2)
+        self.assertTrue(rejected)
+        self.assertEqual(ax.states['发送消息'], 'authorized')
+        self.assertFalse(engine.journal.exists())
+        self.assertEqual([text for text, _ in ax.clicks], ['已授权', '取消授权'])
+        self.assertIn('intent', self.scheduler()['permissions']['发送消息'])

@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -40,6 +41,52 @@ class TargetSelectionTests(unittest.TestCase):
         result=selector.select(self.target(),self.inventory([(None,'fixture'),('/test','fixture')]))
         self.assertFalse(result['ok']);self.assertEqual(result['status'],'target_profile_ambiguous')
         self.assertNotIn('cli_config_dir',result)
+
+    def test_explicit_profile_choice_resolves_ambiguity_without_changing_bot(self):
+        inventory=self.inventory([(None,'fixture'),('/test','fixture'),('/business','different')])
+        for choice, source in [(None,'explicit_default'),('/test','explicit_profile')]:
+            with self.subTest(profile=choice):
+                result=selector.select(self.target(),inventory,profile_choice=choice)
+                self.assertTrue(result['ok']);self.assertEqual(result['cli_config_dir'],choice)
+                self.assertEqual(result['matching_profile_count'],1)
+                self.assertEqual(result['identity_matching_profile_count'],2)
+                self.assertEqual(result['profile_choice_source'],source)
+                self.assertEqual(result['cli_bot_id'],'fixture')
+                self.assertFalse(result['requested_target_changed'])
+                validate_target_selection(result)
+
+    def test_explicit_choice_rejects_missing_wrong_or_unauthorized_profiles(self):
+        inventory=self.inventory([(None,'business-bot'),('/test','fixture'),('/unauthorized','fixture')])
+        inventory['profiles'][2]['status']='unauthorized'
+        for choice in [None,'/missing','/unauthorized']:
+            with self.subTest(profile=choice), self.assertRaisesRegex(ValueError,'requested_profile_not_matching_target'):
+                selector.select(self.target(),inventory,profile_choice=choice)
+        for choice in ['', 'relative/profile', True]:
+            with self.subTest(profile=choice), self.assertRaisesRegex(ValueError,'profile_must_be_absolute'):
+                selector.select(self.target(),inventory,profile_choice=choice)
+
+    def test_cli_explicit_choice_produces_valid_onboarding_selection(self):
+        # Exercise argparse + persisted output, so --default-profile is distinct
+        # from omitting a choice and --profile cannot silently select the default.
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d)
+            target=root/'target.json';target.write_text(json.dumps(self.target()))
+            inventory=root/'profiles.json';inventory.write_text(json.dumps(self.inventory([(None,'fixture'),('/test','fixture')])))
+            for flags, expected in [(['--profile','/test'],'/test'),(['--default-profile'],None)]:
+                output=root/('custom.json' if expected else 'default.json')
+                result=subprocess.run([sys.executable,str(selector.__file__),
+                    '--target',str(target),'--profiles',str(inventory),'--output',str(output),*flags],
+                    capture_output=True,text=True,check=False)
+                self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+                selection=json.loads(output.read_text())
+                validate_target_selection(selection)
+                self.assertEqual(selection['cli_config_dir'],expected)
+                value={k:v for k,v in self.target().items() if k not in ('selection_source','identity_source')}
+                value.update(cli_bot_id='fixture',organization_name='Test Org',target_rows=['发送消息'])
+                if expected is not None:value['cli_config_dir']=expected
+                config=output.with_suffix('.config.json')
+                onboard.configure(value,config,'Darwin',selection=selection)
+                self.assertEqual(json.loads(config.read_text()).get('cli_config_dir'),expected)
 
     def test_incomplete_or_forged_success_record_cannot_select_a_profile(self):
         selection=selector.select(self.target(),self.inventory([(None,'fixture')]))

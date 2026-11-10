@@ -432,7 +432,7 @@ class Renewal:
             self.click(window, menu[0])
         return self.wait(lambda: self.named(window, '取消授权', 'AXButton'), lambda items: len(items) == 1, 'revoke_confirmation_missing')[0]
 
-    def pre_renew(self, window, name, row):
+    def pre_renew(self, window, name, row, *, before_revoke=None):
         old = row['expiry']
         try:
             confirmation = self.prepare_revoke(window, name, old)
@@ -442,6 +442,11 @@ class Renewal:
             # independently re-reading the unchanged, still-authorized scope.
             exc.revocation_not_attempted = True
             raise
+        if before_revoke is not None:
+            # The scheduler records the irreversible-action phase before our
+            # pending journal and final click. A callback/storage failure must
+            # never permit the cancellation to proceed.
+            before_revoke()
         # Persist BEFORE revocation. Next --renew resumes restoration before other work.
         atomic_json(self.journal, {"identity": self.identity, "row": name, "expiry_before": old.isoformat()})
         try:

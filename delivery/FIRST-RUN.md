@@ -10,6 +10,8 @@
 
 先记录用户明确指定的Bot与组织；用户目标优先于业务服务配置，业务服务配置优先于终端默认值。用户指定测试Bot时，不能因默认CLI已绑定业务Bot就改变测试对象。再盘点本机已知CLI/profile路径；不要为找配置读取Secret/凭据文件，也不要修改业务服务。
 
+先收集当前`WECOM_CLI_CONFIG_DIR`与已知业务启动配置中使用的profile路径（只取路径不读凭据），并显式传给`--profile`。工具默认只查真正default，不沿用环境覆盖、不自动扫描其他目录。
+
 先查已知 CLI profile：`delivery/profiles.py` 只调用官方接口，原始身份存到包外私有文件。正确身份命令是 `wecom-cli identity whoami`，不是 `wecom-cli whoami`。`auth show --status` 的 authorized 只表示 CLI 已绑定，不代表业务权限未过期。
 
 **先盘点既有配置，不重新扫码，也不自动选择默认绑定。** 运行：
@@ -64,7 +66,7 @@ python3 delivery/select_target.py --target /absolute/private/target.json --profi
 python3 delivery/existing_entry.py --selection /absolute/private/selection.json --cli /absolute/path/wecom-cli --node /absolute/path/node --output /absolute/private/existing-entry.json
 ```
 
-只有唯一ID匹配才返回`target_profile_selected`；无匹配是`target_profile_not_found`（仅代表已检查配置范围），多份匹配是`target_profile_ambiguous`，都不会自动选择默认项。existing_entry从selection指定的profile读取，并在业务只读调用前再次核对Bot ID；漂移返回`requested_target_mismatch`。若消息权限过期，从官方850003响应取完整原链接；已绑定但从未授予消息权限的850002同样可取官方链接，明确记录not_authorized与authorization_baseline_required，不自动首次授权。健康权限未返回链接时保留已读到的官方UI入口，不制造写入错误取链。URL的type、原生参数和编码逐字保留，不重组为固定type=1。取链不代替创建者/组织/私聊核验。
+只有唯一ID匹配才返回`target_profile_selected`；无匹配是`target_profile_not_found`（仅代表已检查配置范围），多份匹配是`target_profile_ambiguous`，都不会自动选择默认项。消歧时按已知业务配置或明确用户选择，增加`--profile /absolute/known/profile`或`--default-profile`重新选择；只允许在已盘点、ID匹配且authorized的候选中收窄，不改Bot目标。existing_entry从selection指定的profile读取，并在业务只读调用前再次核对Bot ID；漂移返回`requested_target_mismatch`。若消息权限过期，从官方850003响应取完整原链接；已绑定但从未授予消息权限的850002同样可取官方链接，明确记录not_authorized与authorization_baseline_required，不自动首次授权。健康权限未返回链接时保留已读到的官方UI入口，不制造写入错误取链。URL的type、原生参数和编码逐字保留，不重组为固定type=1。取链不代替创建者/组织/私聊核验。
 
 5.0.13 可能恢复上次机器人子页面：先辨认“智能机器人”门户、“我的机器人”列表、“机器人详情”或权限弹窗，再决定下一步。切页后原生 AX 树可能需要重新请求展开；单纯保持 AXEnhancedUserInterface=true 不证明新树可读。`inspect-expanded` 是诊断手段，不能把搜索框里自己输入的 Bot 名称当作已找到 Bot。Bridge 的组织接口返回 success/缓存当前组织也不代替原生选中标记。
 

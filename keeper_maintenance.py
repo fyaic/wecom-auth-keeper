@@ -71,6 +71,8 @@ def read_state(path, identity):
                 if not isinstance(intent, dict) or "expiry_before" not in intent or not timestamp(intent.get("started_at")):
                     raise ValueError()
                 iso(intent["expiry_before"])
+                if "phase" in intent and intent['phase'] not in {'preparing', 'revoking'}:
+                    raise ValueError()
         return value
     except (OSError, ValueError, TypeError):
         raise KeeperError("invalid_maintenance_state", "Cannot verify maintenance state or its Bot binding") from None
@@ -125,7 +127,24 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
             if intent and row["status"] == "authorized":
                 old = iso(intent["expiry_before"])
                 if old is not None and row["expiry"] <= old:
-                    raise KeeperError("action_outcome_unknown", "Prior action is unresolved; no new revocation issued")
+                    if (intent.get('phase') != 'preparing' or engine.journal.exists()
+                            or row['expiry'] != old):
+                        raise KeeperError("action_outcome_unknown", "Prior action is unresolved; no new revocation issued")
+                    # This phase is durable proof that our final revoke was
+                    # never reached. Dismiss a possible leftover menu/dialog,
+                    # reopen the bound page and verify again before retrying.
+                    closed, close_code = engine.close_window()
+                    if close_code or closed.get('ok') is not True:
+                        raise KeeperError('window_cleanup_failed', 'Cannot clear interrupted preparation')
+                    window = engine.open(activate=True)
+                    row = observe(engine, window)[name]
+                    if (engine.journal.exists() or row['status'] != 'authorized'
+                            or row['expiry'] != old):
+                        raise KeeperError("action_outcome_unknown", "Permission changed while reopening interrupted preparation")
+                    record.pop('intent')
+                    save()
+                    intent = None
+            if intent and row["status"] == "authorized":
                 settle(name, row)
                 action = "reconciled"
             elif row["status"] == "expired":
@@ -141,11 +160,15 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
                         and record.get("next_allowed_at", 0) > now().timestamp()):
                     action = "cooldown"
                 else:
-                    record["intent"] = {"expiry_before": expiry_text(row), "started_at": now().timestamp()}
+                    record["intent"] = {"expiry_before": expiry_text(row), "started_at": now().timestamp(),
+                                        "phase": "preparing"}
                     state["permissions"][name] = record
                     save()  # Covers a crash after Keeper removes its pending journal.
+                    def before_revoke():
+                        record['intent']['phase'] = 'revoking'
+                        save()
                     try:
-                        engine.pre_renew(window, name, row)
+                        engine.pre_renew(window, name, row, before_revoke=before_revoke)
                     except Exception as exc:
                         if getattr(exc, 'revocation_not_attempted', False) and not engine.journal.exists():
                             current = observe(engine, window)[name]

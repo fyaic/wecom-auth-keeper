@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Standalone scheduled pre-expiry maintenance for any explicit target_rows allowlist."""
 import argparse
+from datetime import datetime
 import hashlib
 import json
 from pathlib import Path
@@ -63,14 +64,27 @@ def supervise(cfg, *, run=subprocess.run):
     # worker cannot run its finally block, so it cannot own monitor restoration.
     with process_lock(gui_lock_path(), cfg["lock_wait"]) as lock_fd:
         cfg = {**cfg, "_desktop_lock_fd": lock_fd}
+        result = None
         try:
             with monitor_guard(cfg):
-                return supervised_worker(cfg, run=run)
+                result, code = supervised_worker(cfg, run=run)
         except Exception as exc:
-            result, _ = emit_error(exc)
-            result.update(mode="maintenance", status="monitor_coordination_failed", business_verified=False)
-            atomic_json(cfg["state_file"], result)
-            return result, 2
+            error, _ = emit_error(exc)
+            status = "monitor_restore_failed" if result is not None else "monitor_coordination_failed"
+            # Preserve completed renewal/cleanup evidence if only the outer
+            # monitor restoration failed, but never retain its success verdict.
+            result = {**(result or {}), **error, "mode": "maintenance", "status": status,
+                      "business_verified": False}
+            code = 2
+        result.setdefault("mode", "maintenance")
+        result.setdefault("status", "healthy" if result["ok"] else "failed")
+        result.setdefault("checked_at", datetime.now().isoformat(timespec="seconds"))
+        result["pending_recovery"] = Path(cfg["state_file"] + ".pending.json").exists()
+        # Publish the final supervised outcome before releasing the desktop.
+        # Timeout/invalid output must replace a prior healthy state too. A
+        # caller that never obtained this lock must not overwrite its owner.
+        atomic_json(cfg["state_file"], result)
+        return result, code
 
 
 def supervised_worker(cfg, *, run=subprocess.run):
@@ -91,19 +105,24 @@ def supervised_worker(cfg, *, run=subprocess.run):
     except subprocess.TimeoutExpired:
         result = {"ok": False, "mode": "maintenance", "status": "timeout", "error": "maintenance_timeout",
                   "business_verified": False}
-        if policy(cfg)["close_window"]:
-            try:
-                # This child shares the parent's protected cycle; renew.py's
-                # public --close-window would try to acquire the same lock again.
-                child = run([python, str(Path(__file__).resolve()), "--config", cfg["_config_path"],
-                             "--cleanup-worker"], capture_output=True, text=True, timeout=30, **inheritance)
-                closed = json.loads(child.stdout)
-                result["cleanup"] = {"ok": child.returncode == 0 and closed.get("ok") is True}
-            except Exception:
-                result["cleanup"] = {"ok": False}
-        return result, 2
     except (OSError, ValueError, TypeError):
-        return {"ok": False, "mode": "maintenance", "error": "invalid_worker_response"}, 2
+        result = {"ok": False, "mode": "maintenance", "status": "failed",
+                  "error": "invalid_worker_response", "business_verified": False}
+    if policy(cfg)["close_window"]:
+        try:
+            # A timeout or abnormal worker exit cannot run its finally block.
+            # Cleanup inherits the same parent lease and keeps its own budget.
+            child = run([python, str(Path(__file__).resolve()), "--config", cfg["_config_path"],
+                         "--cleanup-worker"], capture_output=True, text=True, timeout=30, **inheritance)
+            closed = json.loads(child.stdout)
+            valid = (isinstance(closed, dict) and child.returncode == 0
+                     and closed.get("ok") is True and isinstance(closed.get("closed"), bool))
+            result["cleanup"] = {"ok": valid}
+            if valid:
+                result["cleanup"]["closed"] = closed["closed"]
+        except Exception:
+            result["cleanup"] = {"ok": False}
+    return result, 2
 
 
 def main(argv=None):

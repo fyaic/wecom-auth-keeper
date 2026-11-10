@@ -1,9 +1,12 @@
 # Agent entry point
 
-When asked to install this project for a business user, read
+When asked to install this project for a business user, follow
+[delivery/AGENT-RUNBOOK.md](delivery/AGENT-RUNBOOK.md), read
 [delivery/AGENT-INSTALL.md](delivery/AGENT-INSTALL.md) and
 [delivery/FIRST-RUN.md](delivery/FIRST-RUN.md) before running renewal commands.
-For a short user-facing introduction, use [delivery/START-HERE.md](delivery/START-HERE.md).
+For the business user, use [delivery/USER-GUIDE.txt](delivery/USER-GUIDE.txt).
+Respect authorization already given in this session; routine inspection and
+reversible fixes do not need repeated permission questions.
 
 This is a macOS Agent installation package requiring acceptance on each device.
 The remote Kimi rehearsal has verified real script renewal and a natural timer

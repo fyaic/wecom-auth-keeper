@@ -1,6 +1,6 @@
 # 安装 Agent 执行协议
 
-适用 Codex、WorkBuddy、Kimi Code 等具备本机文件、终端与界面操作能力的 Agent。**先按 [FIRST-RUN.md](FIRST-RUN.md) 完成首次接入，再运行日常续期。** 不假设业务设备已经有 Bot、已经知道正确组织、已经有私聊消息或授权入口。本文件不额外授权发送消息、扩大权限或修改其他服务；用户本次明确授权优先。
+适用 Codex、WorkBuddy、Kimi Code 等具备本机文件、终端与界面操作能力的 Agent。**先按 [AGENT-RUNBOOK.md](AGENT-RUNBOOK.md) 执行清单与 [FIRST-RUN.md](FIRST-RUN.md) 完成首次接入，再运行日常续期。** 不假设业务设备已经有 Bot、已经知道正确组织、已经有私聊消息或授权入口。本文件不额外授权发送消息、扩大权限或修改其他服务；用户本次明确授权优先。
 
 **适用前提：自动续期设备的企业微信登录 Bot 创建者主账号，只维护该主账号自己创建的 Bot。** 先读取现有CLI与官方页面核验，不能以持有CLI凭据、authorized状态或同组织成员身份替代。前提不成立时保留配置、说明需要创建者桌面，不开启定时任务、不换绑来绕过。把安装Agent实际核验依据记入验收表的 `bootstrap.desktop_creator_account_verified` / `creator_identity_evidence`；这是安装身份核验，与脚本入口回执及真实续期证据分别记录。
 
@@ -13,7 +13,7 @@ python3 delivery/verify_bundle.py
 python3 delivery/onboard.py
 ```
 
-manifest 只检查包内容完整性，不证明发布者身份。需要 Python 3.11+；缺少时按用户授权从可信官方来源安装。macOS 检查实际客户端版本、CPU 架构、已有维护任务及实际运行 Python；Windows 当前返回 unsupported_automation_backend，没有 UIA 后端，不安装 pyobjc 或伪造计划任务成功。支持范围见 [DESIGN.md](DESIGN.md)，实际证据见 [VALIDATION.md](VALIDATION.md)。
+manifest 只检查包内容完整性，不证明发布者身份。需要 Python 3.11+；缺少时按用户授权从可信官方来源安装；本包不含解释器和依赖，首次安装需要联网下载。macOS 检查实际客户端版本、CPU 架构、已有维护任务及实际运行 Python；Windows 当前返回 unsupported_automation_backend，没有 UIA 后端，不安装 pyobjc 或伪造计划任务成功。支持范围见 [DESIGN.md](DESIGN.md)，实际证据见 [VALIDATION.md](VALIDATION.md)。
 
 在 macOS 为本版本准备独立执行环境：
 
@@ -34,7 +34,7 @@ python3 -m venv .venv
 
 顺序固定：**用户指定目标/组织/能力 → 盘点既有profile候选 → 指定Bot的原生组织与官方身份 → 按ID匹配profile → 该目标的创建者核验 → 本机Bot私聊 → 一次入口 → 后台找回。** 无匹配profile时保留指定目标，明确区分“Bot已创建但CLI接入未匹配”；不换成别的已授权Bot，不要求重建目标。详细动作见FIRST-RUN.md。
 
-本机已有 CLI profile 只用官方命令盘点：
+先从当前`WECOM_CLI_CONFIG_DIR`和已知业务启动配置收集非默认profile路径，不读取凭据内容。profiles工具会清空继承覆盖并检查真正default，不自动扫描整机；显式传入其他已知目录。只用官方命令盘点：
 
 ```bash
 python3 delivery/profiles.py --output /absolute/private/profiles.json
@@ -44,6 +44,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 正确身份命令是 `wecom-cli identity whoami`。只读 `auth show --status`、`auth show` 的 Bot ID 及身份结果；原始结果留在私有文件，不向公共报告输出 ID/URL。禁止读取、解密 `.encryption_key`、`credentials.enc`、Secret/token；这不能帮助定位组织。默认 profile 不自动等于业务目标；不同组织 Bot 名称相似或不同都正常，不能擅自换绑已有 CLI。
 
 若目标已创建但未找到对应绑定，按FIRST-RUN的专门分支复用该Bot现有API接入信息、准备独立profile；本机CLI支持`--manual`时不先要求扫码。目标凭据只在本机受控传给官方CLI，不进入模型/日志，不解密其他profile。首次扫码（确需时）、系统授权及首次业务权限授予可能需要一次用户操作；这是安装，不是每次续期都需要人工。用户已经说明目标时不重复问；本机无法消除的歧义只呈现具体候选，不让业务人员提供技术标识。
+
+同一Bot匹配多份profile时，select_target可用`--profile /absolute/known/profile`或`--default-profile`显式消歧，只允许选择已盘点且ID匹配的候选；不删除其他绑定。
 
 `onboard.py --input <私有输入.json> --selection <成功选择记录.json> --output <新私有配置.json>`生成草稿。必填输入：bot_chat_name、organization_name、organization_selector_name、cli_bot_id、authorization_url、target_rows；可选cli_config_dir、wecom_cli、wecom_node。Bot身份、名称、原生组织、profile必须与选择记录一致，否则不写配置；旧部署配置不自动迁移。CLI/Node绝对路径用于后台精简PATH，在GUI launchd中复验。target_rows是用户明确需要的权限白名单，不因验收加权；organization_name保留业务企业名，organization_selector_name必须是本机实际菜单名。
 
@@ -113,20 +115,39 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 
 ## 5. 安装、升级和卸载
 
-完整验收通过、无重复任务且用户要求启用后：
+完整验收通过、用户已要求启用时，将正式策略恢复为每小时/提前24小时。先检查同目标旧任务，等待其周期结束后卸载，避免两套任务。下面变量均由Agent设为本机已核验的绝对路径，当前目录为固定解压目录：
 
 ```bash
-.venv/bin/python maintain.py --config /absolute/private/config.json --write-launchagent /absolute/private/job.plist
-plutil -lint /absolute/private/job.plist
-launchctl bootstrap "gui/$(id -u)" /absolute/private/job.plist
+"$keeper_python" maintain.py --config "$keeper_config" --write-launchagent "$keeper_private/hourly.plist"
+plutil -lint "$keeper_private/hourly.plist"
+keeper_label=$(/usr/libexec/PlistBuddy -c 'Print :Label' "$keeper_private/hourly.plist")
+keeper_plist="$HOME/Library/LaunchAgents/$keeper_label.plist"
 ```
 
-RunAtLoad 会立即执行真实维护，加载后读取运行结果。记录实际 Label、日志和停止方法：
+生成命令仅写文件，`installed=false`不是错误，也不代表已经安装。读取Label后检查`launchctl print "gui/$(id -u)/$keeper_label"`和`$keeper_plist`；有旧任务或文件先核对来源，不能直接覆盖。
+
+正式文件必须放入`~/Library/LaunchAgents`才能在后续用户登录时加载。临时验收文件保留在私有证据目录，不能顺手也装成常驻任务。确定无同目标冲突后，用独占创建避免覆盖旧文件：
 
 ```bash
-launchctl bootout "gui/$(id -u)" /absolute/private/job.plist
+python3 - "$keeper_private/hourly.plist" "$keeper_plist" <<'PYINSTALL'
+import os, pathlib, sys
+source, destination = map(pathlib.Path, sys.argv[1:])
+destination.parent.mkdir(parents=True, exist_ok=True)
+fd = os.open(destination, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+with os.fdopen(fd, 'wb') as stream:
+    stream.write(source.read_bytes())
+PYINSTALL
+launchctl bootstrap "gui/$(id -u)" "$keeper_plist"
 ```
 
-升级用新版本目录，保留旧配置、状态、pending与回滚路径，不覆盖执行中的文件或同时启动两套服务。失败时停止新任务恢复旧版本，不删除 pending 清错。设备休眠、锁屏、退出账号、重启未登录会影响定时执行；客户端升级后重新验收。
+RunAtLoad会立即执行真实维护。加载后核对唯一Label、实际配置/解释器/代码路径、真实输出与退出码、关页结果。文件处于Library/LaunchAgents仅证明已配置登录加载；未重登实测就如实记录，不为验收擅自重启或退出业务桌面。`retry_seconds=300`是最短退避门槛，仍需下一调度周期触发，不是每5分钟运行一次。
 
-给业务人员简短报告：维护哪个组织/Bot/哪些权限，入口准备、真实续期、定时运行各是否通过，以及怎么停止。默认不联系别人、不上传聊天/AX/凭据或原始日志。分发包已通过指定远端的真实续期与自然定时触发，详见VALIDATION.md；不能把这一结果当作当前业务设备已验收，也不能承诺任意Mac或所有客户端版本通用。
+停用须区分：
+
+- **本次登录会话临时卸载**：确认当前周期结束后，执行`launchctl bootout "gui/$(id -u)/$keeper_label"`；plist保留时下次登录会再次加载。
+- **持久停用**：同样先卸载，再将这个目标的plist移出`~/Library/LaunchAgents`至私有备份目录（新路径，不覆盖已有备份），核对原路径已不存在。保留配置、状态、pending、日志和固定代码目录。
+- **恢复**：确认无重复任务和有效执行路径，将该plist放回Library/LaunchAgents，再bootstrap并检查首跑。不得因此停止其他Bot或退出企业微信。
+
+若周期卡住或有pending，先按保留记录的恢复流程处理，不删除锁或未决状态凑绿。升级使用新固定目录，保留旧配置、状态与回滚路径；验收与正式任务使用同一Python。停止旧目标任务后再验证新版本，避免两个版本并行；回滚也先停新任务，保留恢复记录。
+
+给业务人员交付[执行清单](AGENT-RUNBOOK.md)中的本机结果卡：维护对象与权限、入口/真实续期/自然定时/关页结果、正式首跑与策略、项目/配置/日志/plist路径、持久停用与恢复方法。不要只回复“安装成功”。不上传私人证据或联系他人。每个新设备仍需自己的验收，不能将本分发包的远端记录当作当前设备通过。
