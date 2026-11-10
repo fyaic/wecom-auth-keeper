@@ -92,6 +92,7 @@ python3 delivery/existing_entry.py --selection /absolute/private/selection.json 
 
 1. 关闭权限页，回到同一Bot详情，从原生单聊入口建立**本机当前账号与这个Bot的私聊**。5.0.13实测可能是两步：管理详情的“去使用”→通讯录机器人资料→资料页的“发消息”。资料页有“由我创建”“个人使用机器人”“去管理”以及“发消息/添加到群聊”；这还不是聊天。点“发消息”是进入私聊的导航，不是权限页的“授权”，不能点“添加到群聊”。若第2步已实际进入私聊则复用，不重复建入口。
 2. 安装Agent核对进入路径、消息视图、真实聊天标题、消息区域和底部输入框。通讯录选中的Bot行、全局搜索框或任意AXTextArea均不能证明已经进入私聊；不能把它们当作聊天标题/发送输入框。仅名称匹配也不证明是私聊，不在同名群、本人诊断会话或其他人的私聊发送。inspect的bot_contact_profile_hint提示资料页，private_chat_verified始终为false，不能冒充安装观察。
+   在真实私聊调用 `gui.py --action inspect-expanded --python <已授权的绝对Python路径> --evidence-dir <新私有目录>`，记录 `message_view_verified=true` 与 `native_chat_header`。**配置采用实际原生 AX 标题**，不要从截图猜空格；5.0.13 实测视觉显示“续期测试 bot”，AX标题却为“续期测试bot”。这不是另一个Bot，也不是把全部名字去空格匹配的理由。须保留第2步已核验的双ID、CLI与组织，仅修正记录的实际聊天名，重新生成selection与草稿；绝不自动改选目标。`private_chat_verified=false`仍提醒私聊类型需要安装Agent从Bot资料/原生Bot标记确认。
 3. 根据已核验的CLI Bot ID、官方URL、权限和组织，用`onboard.py --input <私有输入.json> --selection <成功的selection.json> --output <私有配置.json>`生成草稿。`organization_selector_name`填写真实原生菜单名，`organization_name`保留业务企业名称。缺少明确选择记录返回`target_selection_required`；输入的Bot、profile或组织偏离选择记录返回`requested_target_mismatch`，不写配置。成功返回`entry_preparation_required`，不是安装成功。
 4. 生成准备发送的文本（只落盘，不发送）：
 
@@ -100,6 +101,14 @@ python3 delivery/prepare_entry.py --config /absolute/private/config.json --messa
 ```
 
 文本包含固定标记 `【自动续期入口】` 和本 Bot 的官方链接。先看该私聊是否已经有匹配双 ID 的入口；有则复用，无则按用户对本次安装的授权**只发一次**。发送由登录的业务账号在已核验 Bot 私聊内完成；不依赖当前可能已过期的 Bot“发送消息”API权限。没有发送授权时，把具体目标和文本准备好后一次确认，不问抽象“能否继续”。
+
+   已确认本机当前会话就是上述Bot私聊、且用户已授权安装入口消息时，可用分发包提供的发送命令，不再另写临时AX发送脚本：
+
+```bash
+.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action seed-current-chat --evidence-dir /absolute/private/seed-1
+```
+
+   此命令明确代表一次发送请求。它不导航、不授权、不修改Bridge；先核对官方CLI身份、真实标题、聊天记录工具栏和唯一底部可编辑输入框，再保留草稿、核验焦点和完整输入、发送一次并读回匹配双ID的链接。可见入口会复用；发送结果未知会保留`.entry-send.json`并拒绝重发，Agent应查历史核实，不删除日志凑绿。标题不符返回`entry_header_mismatch`，通讯录资料页返回失败；都不能算私聊已建立。续期任务不会调用此安装命令。
 
 5. 在本机私聊中确认消息已送出且链接完整可读，再打开链接核对同一 Bot 官方权限页。发送请求成功、另一个设备收到或 Agent 口头说已发送均不够。记录这是“新建私聊并发送入口”还是“复用已核验入口”，关闭权限页。
 

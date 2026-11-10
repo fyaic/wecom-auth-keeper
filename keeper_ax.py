@@ -88,6 +88,37 @@ def submit_search(native, app, window, element, expected):
     search_key(native, app, window, element, 36)  # Return; only while search has focus
 
 
+def composer_key(native, app, window, element, code, flags=0):
+    """Installer-only input; caller also verifies the exact target chat per key."""
+    front = NSWorkspace.sharedWorkspace().frontmostApplication()
+    if (front is None or front.processIdentifier() != native.processIdentifier()
+            or ax_get(app, 'AXFocusedWindow') != window
+            or ax_get(app, 'AXFocusedUIElement') != element
+            or ax_get(element, 'AXRole') != 'AXTextArea'
+            or not ax_settable(element, 'AXValue')):
+        raise KeeperError('entry_composer_focus_lost', 'Composer focus changed; no more input')
+    for down in (True, False):
+        event = CGEventCreateKeyboardEvent(None, code, down)
+        CGEventSetFlags(event, flags)
+        CGEventPostToPid(native.processIdentifier(), event)
+        time.sleep(.05)
+
+
+def paste_composer(native, app, window, element, text):
+    if ax_get(element, 'AXValue') not in ('', None):
+        raise KeeperError('entry_draft_present', 'Existing draft preserved; no paste')
+    with temporary_clipboard(text):
+        if NSPasteboard.generalPasteboard().stringForType_(NSPasteboardTypeString) != text:
+            raise KeeperError('entry_clipboard_changed', 'Prepared entry clipboard changed')
+        composer_key(native, app, window, element, 9, kCGEventFlagMaskCommand)
+
+
+def submit_composer(native, app, window, element, expected):
+    if ax_get(element, 'AXValue') != expected:
+        raise KeeperError('entry_draft_changed', 'Prepared entry draft changed; no send')
+    composer_key(native, app, window, element, 36)
+
+
 def ax_get(element, attribute):
     error, value = AXUIElementCopyAttributeValue(element, attribute, None)
     return value if error == 0 else None

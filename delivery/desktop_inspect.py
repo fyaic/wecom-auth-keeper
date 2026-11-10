@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from keeper_common import emit_error, load_config
 from keeper_accessibility import exposed_tree
-from keeper_navigation import sidebar_rows
+from keeper_navigation import sidebar_rows, chat_header, chat_composer
 from keeper_organization import menu_rows
 from renew import Renewal, target_url, permission_page_error
 
@@ -184,6 +184,14 @@ def snapshot(engine, native, cfg, ax):
             {'发消息', '添加到群聊'} <= labels
             and bool(labels & {'由我创建', '个人使用机器人', '去管理'}))
         entry['private_chat_verified'] = False
+        composer = chat_composer(engine, window)
+        entry['message_view_verified'] = composer is not None
+        # Native AX titles can differ from visually spaced display text. Return
+        # the observed title only in a real message view; never normalize names
+        # or silently replace the installer's selected Bot.
+        if composer is not None:
+            entry['native_chat_header'] = chat_header(engine, window)
+            entry['configured_header_matches'] = cfg is not None and entry['native_chat_header'] == cfg['bot_chat_name']
         for node in web_pages(engine, window):
             values = [ax.ax_get(node, k) for k in ('AXURL', 'AXValue', 'AXTitle')]
             values = [v for v in values if official_page(v)]

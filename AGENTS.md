@@ -51,7 +51,9 @@ Installation order:
    On 5.0.13, “去使用” can first open the contacts Bot profile; then use that
    profile's “发消息” navigation button. A selected contacts row, global search
    or any AXTextArea is not a conversation/composer. Verify the actual message
-   view, header and composer before sending; never use “添加到群聊”.
+   view, header and composer before sending; use the observed AX header from
+   inspect-expanded, not screenshot spacing. Use seed-current-chat for the
+   authorized one-time entry, preserving drafts and unknown-send journals; never use “添加到群聊”.
    If the permission page is accessible only through a conversation, you may
    first open an empty candidate conversation from a native Bot directory row
    for read-only identity inspection. Do not send or authorize until it matches.

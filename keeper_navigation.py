@@ -21,7 +21,7 @@ def chrome(engine, root):
         if total > 1000 or depth > 15:
             raise KeeperError("tree_incomplete", "Native navigation tree exceeds limits")
         role = engine.ax.ax_get(node, "AXRole")
-        if role in {"AXScrollArea", "AXTable", "AXWebArea", "AXTextArea"}:
+        if role in {"AXScrollArea", "AXTable", "AXOutline", "AXWebArea", "AXTextArea"}:
             continue
         yield node
         stack.extend((child, depth + 1) for child in engine.ax.ax_get(node, "AXChildren") or [])
@@ -73,6 +73,61 @@ def sidebar_rows(engine, window):
     if len(tables) > 1:
         raise KeeperError('navigation_unavailable', 'Native sidebar is ambiguous')
     return tables[0] if tables else []
+
+
+def chat_header(engine, window, search=None):
+    """Read the actual native AX title, preserving spaces; never a contacts row."""
+    search = search if search is not None else global_search(engine, window)
+    field = engine.ax.frame(search) if search is not None else None
+    if not field:
+        return None
+    candidates = []
+    for node in chrome(engine, window):
+        bounds = engine.ax.frame(node)
+        if (bounds and engine.ax.ax_get(node, "AXRole") in {"AXStaticText", "AXTextField"}
+                and bounds[0] >= field[0] + field[2]
+                and abs(bounds[1] - field[1]) < 60 and engine.text(node)):
+            candidates.append(engine.text(node))
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def chat_composer(engine, window):
+    """A message toolbar plus one editable bottom composer, not any AXTextArea."""
+    ax = engine.ax
+    outer = ax.frame(window)
+    search = global_search(engine, window)
+    if not outer or search is None or chat_header(engine, window, search) is None:
+        return None
+    history = [n for n in chrome(engine, window) if ax.ax_get(n, 'AXRole') == 'AXButton'
+               and label(engine, n) in {'查找聊天记录', '关闭聊天记录'}]
+    if len(history) != 1:
+        return None
+    toolbar = ax.frame(history[0])
+    field = ax.frame(search)
+    if not toolbar or toolbar[1] < outer[1] + outer[3] * .4:
+        return None
+    matches = []
+    stack = [window]
+    count = 0
+    while stack:
+        node = stack.pop(); count += 1
+        if count > 5000:
+            raise KeeperError('tree_incomplete', 'Composer tree exceeds limits')
+        role = ax.ax_get(node, 'AXRole')
+        # Never treat a web form or a contact directory editor as a composer.
+        if role in {'AXWebArea', 'AXTable', 'AXOutline'}:
+            continue
+        if role == 'AXTextArea':
+            bounds = ax.frame(node)
+            if (bounds and engine.contains(outer, bounds)
+                    and bounds[0] >= field[0] + field[2]
+                    and bounds[1] >= toolbar[1] + toolbar[3]
+                    and bounds[2] >= 150 and bounds[3] >= 40
+                    and ax.ax_settable(node, 'AXValue')):
+                matches.append(node)
+            continue
+        stack.extend(ax.ax_get(node, 'AXChildren') or [])
+    return matches[0] if len(matches) == 1 else None
 
 
 def heading_matches(engine, window, search):
