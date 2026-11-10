@@ -24,6 +24,7 @@ def command(action, python, config):
                'close': ('renew.py', '--close-window'),
                'maintain': ('maintain.py', None), 'discover': ('delivery/discover.py', None),
                'entry-verify': ('delivery/verify_entry.py', None),
+               'initial-grant': ('delivery/grant_initial.py', '--scopes-confirmed'),
                'seed-current-chat': ('delivery/seed_entry.py', '--send-confirmed'),
                'inspect': ('delivery/desktop_inspect.py', None),
                'inspect-expanded': ('delivery/desktop_inspect.py', '--expose-native-tree')}
@@ -114,7 +115,7 @@ def main():
     p.add_argument('--config', help='Required except for initial native-only inspection')
     p.add_argument('--python', dest='inspection_python',
                    help='Absolute execution Python for config-free inspect/inspect-expanded only')
-    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'seed-current-chat', 'entry-verify', 'check', 'check-existing', 'close', 'maintain'], required=True)
+    p.add_argument('--action', choices=['inspect', 'inspect-expanded', 'discover', 'seed-current-chat', 'initial-grant', 'entry-verify', 'check', 'check-existing', 'close', 'maintain'], required=True)
     p.add_argument('--evidence-dir', required=True, help='New private directory outside the release')
     args = p.parse_args()
     try:

@@ -143,3 +143,13 @@ python3 delivery/prepare_entry.py --config /absolute/private/config.json --messa
 | 已有入口但后台找不回来 | 第4步，检查导航/版本/实际 Python 系统权限，不重复发消息。 |
 | 权限显示从未授权 | 完成用户确认范围内的首次授权，单独记录，再验续期。 |
 | entry-verify 通过，maintain 仍失败 | 排查具体运行阶段，保留入口成果；不重建 Bot、不重置 CLI。 |
+
+## 用户明确同意首次权限后
+
+仅在用户已批准配置target_rows中的每一项首次授权时，安装Agent运行：
+
+```bash
+.venv/bin/python delivery/gui.py --config /absolute/private/config.json --action initial-grant --evidence-dir /absolute/private/initial-grant-1
+```
+
+该动作先核对官方CLI身份，持共同桌面锁、校验Bridge协调，再打开双ID绑定页，只为配置范围建立授权基线；已有健康权限不取消，结束自动关页。它不生成入口成功回执，不代表真实续期；之后离开会话重新entry-verify，再验实际有效期延长与自然定时。首次批准不扩展到未配置权限，不修改凭据或其他服务。
