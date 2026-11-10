@@ -259,7 +259,10 @@ class Renewal:
             raise KeeperError("link_not_visible", "Verified link is no longer visible")
         _, link, chat = max(links, key=lambda item: item[0])
         self.ax.click(link, chat)
-        return self.wait(self.select_window, lambda value: value is not None, "page_not_open")
+        opened = self.wait(self.select_window, lambda value: value is not None, "page_not_open")
+        if activate:
+            self.focus_window(native, opened, "page_not_open")
+        return opened
 
     def wait(self, read, accept, error, timeout=20):
         deadline = self.clock() + timeout
