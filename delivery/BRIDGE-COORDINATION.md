@@ -1,6 +1,6 @@
 # 与 WeCom Bridge 共用桌面
 
-此版本为内部验收候选；单元测试不等于远端续期通过。没有 Bridge 的普通 Mac 不需要此集成。
+本版已在远端配套 Bridge cac93a3 上完成真实续期与自然定时触发，详见 [VALIDATION.md](VALIDATION.md)。没有 Bridge 的普通 Mac 不需要此集成。其他桌面自动化服务仍需自己的协调支持，不能推定它们遵守此锁。
 
 仅读取已打开的匹配权限页（`renew.py --check --existing-window` / `gui.py --action check-existing`）不要求此协议；它没有 UI 动作，也不调用 Bridge。已核验目标页的 `close` 同样不调用 Bridge，只执行目标关闭控件的 AXPress。两者均不能代表带导航的自动续期已通过。旧 Bridge 仍运行组织轮巡时，提前取消/重授的完整维护路径仍要求协调，不能用只读检查成功替代。
 

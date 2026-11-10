@@ -5,9 +5,11 @@ When asked to install this project for a business user, read
 [delivery/FIRST-RUN.md](delivery/FIRST-RUN.md) before running renewal commands.
 For a short user-facing introduction, use [delivery/START-HERE.md](delivery/START-HERE.md).
 
-This branch is an internal macOS acceptance candidate. Windows has no automation
-backend. Do not describe package integrity, unit tests or a healthy permission
-page as proof of successful unattended renewal.
+This is a macOS Agent installation package requiring acceptance on each device.
+The remote Kimi rehearsal has verified real script renewal and a natural timer
+trigger on WeCom 5.0.13/95049 CN; see delivery/VALIDATION.md for exact limits.
+Windows has no automation backend. Do not describe package integrity, unit tests
+or a healthy permission page as proof of successful unattended renewal.
 
 Installation order:
 

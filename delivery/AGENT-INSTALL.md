@@ -107,6 +107,8 @@ python3 delivery/profiles.py --output /absolute/private/profiles.json
 3. 同一正式执行 Python、GUI launchd 启动链通过，清理与异常恢复可复核。
 4. 临时定时任务真正触发一次；登记成功或手工 kickstart 不代替自然触发。
 
+自然触发验收可使用包内 `maintain.py --write-launchagent` 生成临时60秒任务：保留生成的 plist，将其副本的 RunAtLoad 改为 false，再 bootstrap；记录加载时间和自然输出。验收策略可暂用 within_hours=168、interval_seconds=60、min_renew_interval_seconds=60、retry_seconds=60，实际配置字段以配置示例与策略解析为准。至少捕获一轮 `pre_renewed`、有效期严格增加、pending=false、cleanup.closed=true，随后卸载临时任务。分钟精度使同一分钟重授不构成延期证据；not_due/cooldown 也不算真实续期。恢复正式24小时/3600秒策略，再生成正式任务；严禁遗留短周期重复撤销授权。保留实际输出和 plist，不能修改结果文件把检查变成续期。
+
 使用 acceptance.example.json 的私有副本（schema_version=3）分别记录首次接入、入口、续期、定时结果，release_commit 从 manifest 读取。bootstrap.private_chat_opened_from_verified_bot 必须由安装 Agent 实际观察；entry-verify 的标题/链接结果不能替代。任一 Bot/设备通过不代表其他设备或 Windows 通过。
 
 ## 5. 安装、升级和卸载
@@ -127,4 +129,4 @@ launchctl bootout "gui/$(id -u)" /absolute/private/job.plist
 
 升级用新版本目录，保留旧配置、状态、pending与回滚路径，不覆盖执行中的文件或同时启动两套服务。失败时停止新任务恢复旧版本，不删除 pending 清错。设备休眠、锁屏、退出账号、重启未登录会影响定时执行；客户端升级后重新验收。
 
-给业务人员简短报告：维护哪个组织/Bot/哪些权限，入口准备、真实续期、定时运行各是否通过，以及怎么停止。默认不联系别人、不上传聊天/AX/凭据或原始日志。当前包仍是内部候选，未通过远端真实续期前不能发布为“Mac通用可用版”。
+给业务人员简短报告：维护哪个组织/Bot/哪些权限，入口准备、真实续期、定时运行各是否通过，以及怎么停止。默认不联系别人、不上传聊天/AX/凭据或原始日志。分发包已通过指定远端的真实续期与自然定时触发，详见VALIDATION.md；不能把这一结果当作当前业务设备已验收，也不能承诺任意Mac或所有客户端版本通用。
