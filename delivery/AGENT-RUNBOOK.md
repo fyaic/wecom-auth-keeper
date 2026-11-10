@@ -65,7 +65,7 @@ onboard生成草稿后检查实际`venv_python`、CLI/Node及Bridge协调设置�
 - 已获准提前取消/重授时，临时策略为`within_hours=168, interval_seconds=60, min_renew_interval_seconds=60, retry_seconds=60, close_window=true`。
 - 先`gui.py --action maintain`，保存每项`expiry_before/expiry`，必须严格延长、pending=false、cleanup.closed=true。若刚授予，等跨过页面的分钟精度再做实际预续期；not_due/cooldown不算。
 - 用`maintain.py --write-launchagent`在新私有证据目录生成临时plist，保留原件，将执行副本**仅RunAtLoad改false**，bootstrap并记录加载时间；不得kickstart。
-- 等自然输出，只有整体`ok=true`、全部`target_rows`在该次逐项实际`pre_renewed`且期限增加、无pending、关页成功才通过。把原始日志结果逐字存成独立证据，不能拿上次state当本次成功。设有界观察时间并在finally卸载临时任务，失败也卸载；不能留下60秒任务继续反复撤销。
+- 等自然输出，只有整体`ok=true`、全部`target_rows`在该次逐项实际`pre_renewed`且期限增加、无pending、关页成功才通过。保留本次原始日志，并将对应JSON结果独立归档（字段值不可改动），不能拿上次state当本次成功。设有界观察时间并在finally卸载临时任务，失败也卸载；不能留下60秒任务继续反复撤销。
 - 复核同Bot必要的只读业务调用和共用服务恢复。禁止为测试发送业务消息或写业务表。
 
 ## 5. 正式持久任务与结果卡
