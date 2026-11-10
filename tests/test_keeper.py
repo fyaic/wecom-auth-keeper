@@ -54,6 +54,7 @@ class FakeAX:
 
     def ax_get(self, element, key): return element.get(key)
     def frame(self, element): return element.get('_frame')
+    def action_names(self, element): return element.get("_actions", ["AXPress"])
     def application(self): return object(), self.app
     def activate(self, app): pass
     def ax_perform(self, element, action):

@@ -214,3 +214,28 @@ class NativeTests(unittest.TestCase):
             keeper_ax.click(element, viewport)
             self.assertEqual([c.args[1] for c in action.call_args_list], ['AXScrollToVisible', 'AXPress'])
             mouse.assert_not_called()
+
+    def test_text_menu_navigation_requires_exact_hit_and_never_accepts_final_button(self):
+        import keeper_ax as ax
+        native=Mock();native.processIdentifier.return_value=123
+        app,window,page,element,other=object(),object(),object(),object(),object()
+        role=['AXStaticText'];focused=[window];version=['5.0.13'];hit=[element]
+        def get(n,k):
+            return {'AXFocusedWindow':focused[0], 'AXWindows':[window],
+                    'AXRole':role[0], 'AXTitle':'取消授权'}.get(k)
+        with patch.object(ax,'ax_get',side_effect=get), \
+             patch.object(ax,'frame',side_effect=lambda n:(20,20,60,20) if n is element else (0,0,600,600)), \
+             patch.object(ax,'action_names',return_value=['AXShowMenu','AXScrollToVisible']), \
+             patch.object(ax,'client_version',side_effect=lambda n:version[0]), \
+             patch.object(ax,'NSWorkspace') as workspace, \
+             patch.object(ax,'AXUIElementCreateSystemWide',return_value=app), \
+             patch.object(ax,'AXUIElementCopyElementAtPosition',side_effect=lambda *a:(0,hit[0])), \
+             patch.object(ax,'CGEventCreateMouseEvent',return_value=object()), \
+             patch.object(ax,'CGEventPost') as post, patch.object(ax.time,'sleep'):
+            workspace.sharedWorkspace.return_value.frontmostApplication.return_value=native
+            for field,value in ((role,'AXButton'),(focused,other),(version,'5.0.12'),(hit,other)):
+                original=field[0];field[0]=value
+                with self.assertRaises(KeeperError):ax.open_revoke_confirmation(native,app,window,page,element)
+                post.assert_not_called();field[0]=original
+            ax.open_revoke_confirmation(native,app,window,page,element)
+            self.assertEqual(post.call_count,2)

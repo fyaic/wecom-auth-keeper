@@ -7,6 +7,7 @@ from ApplicationServices import (
     AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
     AXUIElementPerformAction, AXUIElementCopyActionNames, AXUIElementSetAttributeValue,
     AXUIElementIsAttributeSettable, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
+    AXUIElementCopyElementAtPosition, AXUIElementCreateSystemWide,
 )
 from Quartz import (
     CGEventCreateMouseEvent, CGEventPost, CGPoint, kCGEventLeftMouseDown,
@@ -184,6 +185,42 @@ def click(element, window, *, allow_coordinate_fallback=True):
     for kind in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
         CGEventPost(kCGHIDEventTap, CGEventCreateMouseEvent(None, kind, CGPoint(cx, cy), 0))
         time.sleep(0.05)
+
+
+def open_revoke_confirmation(native, app, window, page, element):
+    """5.0.13's text-only menu opens a confirmation; never clicks that button.
+
+    The caller binds the page/row and owns the desktop lease. No guessed
+    position: require a live native menu element and system-wide hit testing.
+    Final revoke and grant continue to require AXPress.
+    """
+    def verify():
+        front = NSWorkspace.sharedWorkspace().frontmostApplication()
+        if (client_version(native) != '5.0.13' or front is None
+                or front.processIdentifier() != native.processIdentifier()
+                or ax_get(app, 'AXFocusedWindow') != window
+                or window not in (ax_get(app, 'AXWindows') or [])
+                or ax_get(element, 'AXRole') != 'AXStaticText'
+                or (ax_get(element, 'AXTitle') or ax_get(element, 'AXValue')) != '取消授权'
+                or 'AXPress' in action_names(element)):
+            raise KeeperError('revoke_menu_unverified', 'Expected the focused versioned text-only revoke menu')
+        bounds, outer = frame(element), frame(page)
+        if not bounds or not outer:
+            raise KeeperError('revoke_menu_unverified', 'Menu geometry unavailable')
+        x,y,w,h = bounds; ox,oy,ow,oh = outer
+        if not (w > 0 and h > 0 and ox <= x and oy <= y and x+w <= ox+ow and y+h <= oy+oh):
+            raise KeeperError('revoke_menu_unverified', 'Menu outside bound page')
+        center = (x+w/2, y+h/2)
+        error, hit = AXUIElementCopyElementAtPosition(AXUIElementCreateSystemWide(), *center, None)
+        if error != 0 or hit != element:
+            raise KeeperError('revoke_menu_occluded', 'System hit test did not identify the same menu element')
+        return center
+    center = verify()
+    if verify() != center:
+        raise KeeperError('revoke_menu_unverified', 'Menu moved before navigation')
+    for kind in (kCGEventLeftMouseDown, kCGEventLeftMouseUp):
+        CGEventPost(kCGHIDEventTap, CGEventCreateMouseEvent(None, kind, CGPoint(*center), 0))
+        time.sleep(.05)
 
 
 def application():

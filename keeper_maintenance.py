@@ -144,7 +144,16 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
                     record["intent"] = {"expiry_before": expiry_text(row), "started_at": now().timestamp()}
                     state["permissions"][name] = record
                     save()  # Covers a crash after Keeper removes its pending journal.
-                    engine.pre_renew(window, name, row)
+                    try:
+                        engine.pre_renew(window, name, row)
+                    except Exception as exc:
+                        if getattr(exc, 'revocation_not_attempted', False) and not engine.journal.exists():
+                            current = observe(engine, window)[name]
+                            if current['status'] == 'authorized' and current['expiry'] == row['expiry']:
+                                record.pop('intent', None)
+                                record['last_preparation_failure'] = now().isoformat(timespec='seconds')
+                                save()
+                        raise
                     row = observe(engine, window)[name]
                     settle(name, row)
                     action = "pre_renewed"

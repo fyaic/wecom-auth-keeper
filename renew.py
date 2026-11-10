@@ -407,16 +407,42 @@ class Renewal:
         self.authorize(window, name, old)
         self.journal.unlink()
 
+    def prepare_revoke(self, window, name, old):
+        row = self.read_rows(window)[name]
+        if row['status'] != 'authorized' or row['expiry'] != old:
+            raise KeeperError('row_changed', 'Permission changed before opening revoke menu')
+        self.click(window, row['authorized'])
+        menu = self.wait(lambda: self.named(window, '取消授权'), lambda items: len(items) == 1, 'revoke_menu_missing')
+        if ('AXPress' not in self.ax.action_names(menu[0])
+                and self.ax.ax_get(menu[0], 'AXRole') == 'AXStaticText'):
+            native, _ = self.ax.application()
+            self.focus_window(native, window, 'revoke_menu_unverified')
+            page = self.bound(window)
+            # Re-read after focusing; no cached element or confirmation button.
+            menu = self.named(window, '取消授权')
+            current = self.read_rows(window)[name]
+            if (len(menu) != 1 or self.named(window, '取消授权', 'AXButton')
+                    or current['status'] != 'authorized' or current['expiry'] != old):
+                raise KeeperError('revoke_menu_unverified', 'Revoke menu or row changed')
+            self.ax.open_revoke_confirmation(native, self.app, window, page, menu[0])
+        else:
+            self.click(window, menu[0])
+        return self.wait(lambda: self.named(window, '取消授权', 'AXButton'), lambda items: len(items) == 1, 'revoke_confirmation_missing')[0]
+
     def pre_renew(self, window, name, row):
-        old = row["expiry"]
-        self.click(window, row["authorized"])
-        menu = self.wait(lambda: self.named(window, "取消授权"), lambda items: len(items) == 1, "revoke_menu_missing")
-        self.click(window, menu[0])
-        confirm = self.wait(lambda: self.named(window, "取消授权", "AXButton"), lambda items: len(items) == 1, "revoke_confirmation_missing")
+        old = row['expiry']
+        try:
+            confirmation = self.prepare_revoke(window, name, old)
+        except Exception as exc:
+            # The final revoke has not even been prepared in the journal.
+            # Maintenance may clear ONLY this proven non-mutating intent after
+            # independently re-reading the unchanged, still-authorized scope.
+            exc.revocation_not_attempted = True
+            raise
         # Persist BEFORE revocation. Next --renew resumes restoration before other work.
         atomic_json(self.journal, {"identity": self.identity, "row": name, "expiry_before": old.isoformat()})
         try:
-            self.click(window, confirm[0])
+            self.click(window, confirmation)
             self.wait(lambda: self.read_rows(window)[name], lambda r: r["status"] == "expired" and r["btn"] is not None, "revoke_not_confirmed")
             self.authorize(window, name, old)
         except Exception:

@@ -285,3 +285,25 @@ class MaintenanceTests(Fixture):
         groups=json.loads(result.stdout)['capability_groups']
         self.assertEqual(groups['mail'], ['搜索与获取邮件内容','发送邮件'])
         self.assertIn('上传与更新微盘文件',groups['disk'])
+
+    def test_known_preparation_failure_retries_without_stale_intent(self):
+        ax,engine=self.setup_cycle(['发送消息'])
+        with patch.object(engine,'prepare_revoke',side_effect=KeeperError('ax_press_failed','menu')):
+            result,code=self.cycle(ax,engine)
+        self.assertEqual(code,2)
+        self.assertNotIn('intent',self.scheduler()['permissions']['发送消息'])
+        self.assertFalse(engine.journal.exists())
+        self.wall+=timedelta(minutes=6)
+        result,code=self.cycle(ax,engine)
+        self.assertEqual(code,0)
+        self.assertEqual(result['rows']['发送消息']['action'],'pre_renewed')
+
+    def test_preparation_failure_with_changed_scope_preserves_intent(self):
+        ax,engine=self.setup_cycle(['发送消息'])
+        def changed(*args):
+            ax.states['发送消息']='expired';ax.refresh()
+            raise KeeperError('revoke_menu_unverified','changed')
+        with patch.object(engine,'prepare_revoke',side_effect=changed):
+            result,code=self.cycle(ax,engine)
+        self.assertEqual(code,2)
+        self.assertIn('intent',self.scheduler()['permissions']['发送消息'])
