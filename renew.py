@@ -1,411 +1,437 @@
 #!/usr/bin/env python3
-"""wecom-auth-renew —— 企业微信 wecom-cli 能力授权自动续期（通用独立版 v1.0）
-
-解决的问题：wecom-cli 的「文档」能力授权（读/写两条独立线）各 7 天到期，到期报
-850003、不会因调用自动续期、官方无自动续期机制（#87 挂起待产品评估）。本方案在
-到期后自动完成续期：打开授权页 → 点击到期行的「授权」→ 新 7 天时钟。
-
-通道（2026-09 经两周实机验证）：把 authorizationList 续期链接作为消息发进/存在于
-机器人聊天 → 点击气泡内 AXLink（聊天区 AX 全稳定）→ 企微内置浏览器新窗口打开
-「可使用权限」页（登录会话现成，零扫码）→ 页面为规整 AXWebArea，能力名/已授权/
-有效期至/授权按钮全可读 → 点击到期行的「授权」AXButton。
-
-用法：
-  renew.py --config <config.json> --check    只读：两条权限线状态与有效期
-  renew.py --config <config.json> --renew    续期：对到期行点击授权（轮询确认+补点）
-
-依赖：①macOS 企微桌面端已登录（会话属于能授权该 bot 的成员）②bridge pyobjc 环境
-（venv_python 指向，仅用其 AX 库）③可选 bridge HTTP（bridge_send_link=true 时用于
-把链接发进聊天；false 则点击聊天中已有链接——链接为静态地址、历史消息里永久可点）
-配置：复制 config.example.json → config.json（已 gitignore），填 bot 身份三要素。
-
-实战记录：2026-09-14 读线 16:12 / 写线 20:04 两次真实续期成功（写线全程无人值守，
-检测→续期→复探→通知闭环）。完整踩坑实录见 docs/auth-model.md。
-"""
-import json, os, re, subprocess, sys, time, urllib.request
+"""WeCom permission inspection and recovery. --help/--doctor never operate the GUI."""
+import argparse
+from contextlib import contextmanager
 from datetime import datetime, timedelta
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+import time
+import urllib.request
+from urllib.parse import parse_qs, urlencode, urlsplit
 
-CONFIG_PATH = None
-CFG = None
-_no_proxy = urllib.request.build_opener(urllib.request.ProxyHandler({}))
-RENEW_LOCK = "/tmp/wecom-auth-renew.lock"
-
-
-def load_config():
-    global CONFIG_PATH, CFG
-    for i, a in enumerate(sys.argv):
-        if a == "--config" and i + 1 < len(sys.argv):
-            CONFIG_PATH = sys.argv[i + 1]
-    if not CONFIG_PATH or not os.path.exists(CONFIG_PATH):
-        print(json.dumps({"ok": False, "error": f"config not found: {CONFIG_PATH}"}))
-        sys.exit(3)
-    CFG = json.load(open(CONFIG_PATH))
-    for k in ("bot_chat_name", "aibotid", "str_aibotid"):
-        if not CFG.get(k) or str(CFG[k]).startswith("<"):
-            print(json.dumps({"ok": False, "error": f"config field {k} unset"}))
-            sys.exit(3)
-
-
-def _p(key):
-    return os.path.expanduser(CFG.get(key, ""))
-
-
-def log(msg):
-    line = f"[{datetime.now():%Y-%m-%d %H:%M:%S}] {msg}"
-    print(line)
-    lp = _p("log_file")
-    if lp:
-        os.makedirs(os.path.dirname(lp), exist_ok=True)
-        with open(lp, "a") as f:
-            f.write(line + "\n")
-
-
-load_config()
-# bridge 的 pydantic Settings 从 cwd 找 .env——必须在 import 其模块前落位（launchd 无 cwd）
-BRIDGE_SRC = CFG.get("wecom_bridge_src", "")
-if BRIDGE_SRC and os.path.isdir(BRIDGE_SRC):
-    os.chdir(os.path.dirname(BRIDGE_SRC.rstrip("/")))
-    sys.path.insert(0, BRIDGE_SRC)
-from wecom.ax.helpers import create_app_ref, ax_get, ax_perform, click_at  # noqa: E402
-from AppKit import NSWorkspace  # noqa: E402
-
-RENEW_URL = (f"https://work.weixin.qq.com/ai/aiHelper/authorizationList?from=chat"
-             f"&forceInnerBrowser=1&aibotid={CFG['aibotid']}"
-             f"&str_aibotid={CFG['str_aibotid']}&type=1")
-TARGET_ROWS = CFG.get("target_rows", ["新建与编辑文档", "搜索与获取文档内容"])
+from keeper_common import KeeperError, atomic_json, emit_error, executable, gui_lock_path, load_config, process_lock
 
 ZW = re.compile(r"[\u200b\u200c\u200d\ufeff\ufffc]")
-_app = None
+from keeper_capabilities import CAPABILITY_LABELS
 
 
-def clean(s):
-    """去零宽/对象替换符——企微 AX 文本常带 \u200b，精确匹配前必清"""
-    return ZW.sub("", str(s or "")).strip()
+def clean(value):
+    return ZW.sub("", str(value or "")).strip()
 
 
-def http_json(method, path, body=None, timeout=15):
-    req = urllib.request.Request(CFG["bridge_url"] + path, method=method,
-                                 data=json.dumps(body).encode() if body else None,
-                                 headers={"Content-Type": "application/json"})
-    with _no_proxy.open(req, timeout=timeout) as r:
-        return json.loads(r.read())
-
-
-def frame(el):
-    try:
-        ps, ss = str(ax_get(el, "AXPosition")), str(ax_get(el, "AXSize"))
-        m1 = re.search(r"x:([\d.]+) y:([\d.]+)", ps)
-        m2 = re.search(r"w:([\d.]+) h:([\d.]+)", ss)
-        if not m1 or not m2:
-            return None
-        return float(m1.group(1)), float(m1.group(2)), float(m2.group(1)), float(m2.group(2))
-    except Exception:
+def parse_expiry(text, now=None):
+    now = now or datetime.now()
+    match = re.search(r"(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})", text)
+    if not match:
         return None
-
-
-def wecom_pid():
-    out = subprocess.run(["pgrep", "-x", "企业微信"], capture_output=True, text=True)
-    return int(out.stdout.split()[0]) if out.stdout.strip() else None
-
-
-def activate(pid):
-    for a in NSWorkspace.sharedWorkspace().runningApplications():
-        if a.processIdentifier == pid:
-            a.activateWithOptions_(1 << 1)
-            return
-
-
-def find_all(pred, depth_max=24, cap=12):
-    out = []
-
-    def walk(el, depth):
-        if len(out) >= cap or depth > depth_max:
-            return
-        if pred(el):
-            out.append(el)
-            return
-        for k in (ax_get(el, "AXChildren") or []):
-            walk(k, depth + 1)
-
-    for w in (ax_get(_app, "AXWindows") or []):
-        walk(w, 0)
-    return out
-
-
-def window_has_perm(win):
-    flag = [False]
-
-    def walk(el, depth=0):
-        if flag[0] or depth > 10:
-            return
-        if "可使用权限" in str(ax_get(el, "AXTitle") or "") + str(ax_get(el, "AXValue") or ""):
-            flag[0] = True
-            return
-        for k in (ax_get(el, "AXChildren") or []):
-            walk(k, depth + 1)
-
-    walk(win)
-    return flag[0]
-
-
-def send_link_message():
-    """bridge 可用时把续期链接发进机器人聊天（保证最新链接在可视区底部）"""
-    if not CFG.get("bridge_send_link"):
-        return
-    ts = datetime.now().strftime("%Y%m%d%H%M%S")
-    r = http_json("POST", "/wecom/send",
-                  {"to": CFG["bot_chat_name"],
-                   "message": f"续期通道（自动，请忽略）{RENEW_URL}",
-                   "idempotency_key": f"wlr-renew-{ts}"}, timeout=120)
-    if not r.get("success"):
-        log(f"bridge send failed: {r}")
-
-
-def open_auth_window(pid, retries=2):
-    """点击聊天中的授权链接 → 返回「可使用权限」窗口（重试整轮）"""
-    for attempt in range(retries):
-        send_link_message()
-        activate(pid)
-        time.sleep(1.0)
-        links = find_all(lambda e: str(ax_get(e, "AXRole")) == "AXLink"
-                         and "authorizationList" in str(ax_get(e, "AXValue") or "")
-                         + str(ax_get(e, "AXTitle") or ""))
-        if links:
-            with_frame = [l for l in links if frame(l)]
-            if with_frame:
-                newest = max(with_frame, key=lambda e: frame(e)[1])
-                x, y, w, h = frame(newest)
-                click_at(x + w / 2, y + h / 2)
-            else:
-                rc = ax_perform(links[-1], "AXPress")
-                log(f"link frame missing → AXPress rc={rc}")
-                time.sleep(1.0)
-            for _ in range(20):
-                time.sleep(1.0)
-                for win in (ax_get(_app, "AXWindows") or []):
-                    if window_has_perm(win):
-                        time.sleep(0.8)
-                        return win
-        log(f"auth window not opened (attempt {attempt + 1})")
-        time.sleep(2.0)
-    raise RuntimeError("授权页窗口未能打开（重试耗尽）")
-
-
-def close_auth_window(win):
-    try:
-        cb = ax_get(win, "AXCloseButton")
-        if cb is not None:
-            ax_perform(cb, "AXPress")
-            time.sleep(1.0)
-    except Exception as e:
-        log(f"close window err: {e}")
-
-
-def parse_expiry(text):
-    m = re.search(r"(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})", text)
-    if not m:
-        return None
-    mo, d, hh, mm = map(int, m.groups())
-    now = datetime.now()
-    dt = datetime(now.year, mo, d, hh, mm)
-    if dt < now - timedelta(days=180):
-        dt = dt.replace(year=dt.year + 1)
-    return dt
-
-
-def read_rows(win):
-    """返回 {行名: {status: authorized|expired|missing, expiry: dt|None, btn: el|None}}
-    关联规则（相对坐标，抗窗口位移）：状态列元素在行名右侧 Δx>350 且 Δy∈(0,70)"""
-    target_clean = [clean(n) for n in TARGET_ROWS]
-    texts = []
-
-    def walk(el, depth):
-        if depth > 12 or len(texts) > 200:
-            return
-        role = str(ax_get(el, "AXRole"))
-        t = clean(ax_get(el, "AXTitle")) or clean(ax_get(el, "AXValue"))
-        if role == "AXStaticText" and t:
-            texts.append((t, el))
-        elif role == "AXButton" and t == "授权":
-            texts.append((t, el))
-        for k in (ax_get(el, "AXChildren") or []):
-            walk(k, depth + 1)
-
-    walk(win, 0)
-    anchors, expiries, btns = [], [], []
-    for t, el in texts:
-        f = frame(el)
-        if f is None:
-            continue
-        x, y = f[0], f[1]
-        if t in target_clean:
-            anchors.append((x, y, t))
-        elif t.startswith("有效期至"):
-            expiries.append((x, y, parse_expiry(t)))
-        elif t == "授权":
-            btns.append((x, y, el))
-    rows = {}
-    for name in TARGET_ROWS:
-        cname = clean(name)
-        cand = [a for a in anchors if a[2] == cname]
-        if not cand:
-            rows[name] = {"status": "missing", "expiry": None, "btn": None}
-            continue
-        ax_, ay = min((a[0], a[1]) for a in cand)
-        expiry = None
-        btn = None
-        for x, ey, dt in expiries:
-            if x - ax_ > 350 and 0 < ey - ay < 70:
-                expiry = dt if dt else expiry
-        for x, by, el in btns:
-            if x - ax_ > 350 and 0 < by - ay < 70:
-                btn = el
-        rows[name] = {"status": "expired" if btn else "authorized",
-                      "expiry": expiry, "btn": btn}
-    return rows
-
-
-def find_intercept():
-    """安全拦截页检测（2026-10-27 实证）：授权提交会请求 aegis.qq.com 风控，
-    该域名被 NextDNS 类 DNS 拦截时内嵌浏览器弹「访问链接存在安全风险」，
-    需人工长按「继续访问」——合成鼠标事件（含长按变体）全部无效，故只检测告警。"""
-    return find_all(lambda e: str(ax_get(e, "AXRole")) == "AXButton"
-                    and clean(ax_get(e, "AXTitle")) == "继续访问")
-
-
-def click_renew(win, name, row, max_tries=3):
-    """点授权并轮询确认（≤30s/轮），未中补点重试——首击偶发未中的闭环加固。
-    返回 True=已授权 / False=失败（含安全拦截）。
-    2026-10-27 授权页改版：确认弹窗变「发送/取消」（旧词 确认/确定 匹配不上导致连败）。"""
-    for try_i in range(max_tries):
-        r = row["btn"] if try_i == 0 else None
-        if r is None:
-            r = read_rows(win).get(name, {}).get("btn")
-            if r is None:
-                return True  # 行已 authorized——成功
-        f = frame(r)
-        if f is None:
-            return True
-        click_at(f[0] + f[2] / 2, f[1] + f[3] / 2)
-        time.sleep(1.5)
-        for _ in range(3):  # 确认弹窗（2026-10-27 起为「发送」；保留旧词兼容）
-            confirms = find_all(lambda e: str(ax_get(e, "AXRole")) == "AXButton"
-                                and clean(ax_get(e, "AXTitle")) in
-                                ("发送", "确认", "确定", "重新授权", "同意"))
-            if not confirms:
-                break
-            cf = frame(confirms[0])
-            if cf is None:
-                break
-            click_at(cf[0] + cf[2] / 2, cf[1] + cf[3] / 2)
-            time.sleep(1.2)
-        # 安全拦截：aegis.qq.com 被 DNS 层拦截 → 快速失败（人工长按/修 hosts 后下轮自愈）
-        if find_intercept():
-            log("SECURITY INTERCEPT: aegis.qq.com 被 DNS 拦截（NextDNS/hosts），"
-                "需人工长按『继续访问』或修 DNS 后下轮自愈")
-            return False
-        t0 = time.time()
-        while time.time() - t0 < 30:
-            if read_rows(win).get(name, {}).get("status") == "authorized":
-                return True
-            time.sleep(3.0)
-    return False
-
-
-def acquire_renew_lock(max_wait_s=150):
-    import shutil
-    waited = 0
-    while waited < max_wait_s:
-        if os.path.isdir(RENEW_LOCK):
-            try:
-                if time.time() - os.path.getmtime(RENEW_LOCK) > 300:
-                    shutil.rmtree(RENEW_LOCK, ignore_errors=True)
-                    continue
-            except OSError:
-                pass
-            time.sleep(5)
-            waited += 5
-            continue
+    values = [int(v) for v in match.groups()]
+    candidates = []
+    for year in (now.year - 1, now.year, now.year + 1):
         try:
-            os.mkdir(RENEW_LOCK)
-            return RENEW_LOCK
-        except FileExistsError:
-            time.sleep(2)
-            waited += 2
-    return None
+            candidates.append(datetime(year, *values))
+        except ValueError:
+            pass
+    return min(candidates, key=lambda dt: abs(dt - now)) if candidates else None
 
 
-def release_renew_lock(lockdir):
-    import shutil
-    if lockdir:
-        shutil.rmtree(lockdir, ignore_errors=True)
+def target_url(value, cfg):
+    try:
+        url = urlsplit(str(value))
+        query = parse_qs(url.query)
+        return (url.scheme == "https" and url.hostname == "work.weixin.qq.com"
+                and url.port in (None, 443) and not url.username and not url.password
+                and url.path == "/ai/aiHelper/authorizationList"
+                and query.get("aibotid") == [cfg["aibotid"]]
+                and query.get("str_aibotid") == [cfg["str_aibotid"]])
+    except (TypeError, ValueError):
+        return False
 
 
-def set_monitor(mode):
-    if not CFG.get("bridge_send_link"):
+def bridge_request(cfg, method, path, body=None):
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    req = urllib.request.Request(cfg["bridge_url"].rstrip("/") + path, method=method,
+                                 data=json.dumps(body).encode() if body is not None else None,
+                                 headers={"Content-Type": "application/json"})
+    with opener.open(req, timeout=30) as response:
+        result = json.load(response)
+    if not isinstance(result, dict):
+        raise KeeperError("bridge_error", "Invalid bridge response")
+    return result
+
+
+@contextmanager
+def monitor_guard(cfg):
+    enabled = cfg.get("bridge_monitor", cfg.get("bridge_send_link", False))
+    if not enabled:
+        yield
         return
+    original = bridge_request(cfg, "GET", "/wecom/monitor/mode").get("mode")
+    if original not in {"active", "observe"}:
+        raise KeeperError("monitor_unknown", "Cannot establish the original bridge monitor mode")
     try:
-        http_json("POST", "/wecom/monitor/mode", {"mode": mode})
-    except Exception as e:
-        log(f"monitor {mode} failed: {e}")
-
-
-def main():
-    global _app
-    mode = "--renew" if "--renew" in sys.argv else "--check"
-    pid = wecom_pid()
-    if pid is None:
-        print(json.dumps({"ok": False, "error": "WeCom not running"}))
-        return 3
-    lockdir = acquire_renew_lock()
-    if lockdir is None:
-        print(json.dumps({"ok": False, "error": "renew lock busy"}))
-        return 4
-    _app = create_app_ref(pid)
-    try:
-        set_monitor("observe")  # GUI 期间防消息监控抢界面（finally 恢复）
-        win = open_auth_window(pid)
-        rows_before = {}
-        for _ in range(15):  # 权限行晚于页头渲染——轮询等行
-            rows_before = read_rows(win)
-            if any(r["status"] != "missing" for r in rows_before.values()):
-                break
-            time.sleep(1.0)
-        result = {"mode": mode, "rows": {}}
-        for name, row in rows_before.items():
-            entry = {"status": row["status"],
-                     "expiry": row["expiry"].strftime("%Y-%m-%d %H:%M") if row["expiry"] else None}
-            if mode == "--renew" and row["status"] == "expired" and row["btn"] is not None:
-                ok = click_renew(win, name, row)
-                na = read_rows(win).get(name, {})
-                entry["renewed"] = na.get("status") == "authorized" or ok
-                entry["expiry_after"] = (na["expiry"].strftime("%Y-%m-%d %H:%M")
-                                         if na.get("expiry") else None)
-                if not entry["renewed"] and find_intercept():
-                    entry["blocked"] = "security_intercept"
-                    result["blocked"] = "security_intercept"
-            result["rows"][name] = entry
-        # 状态落盘——记最终态（续期后的有效期），避免"续期前 null"误导观察
-        # （2026-10-28 整改）；须在关窗前读
-        rows_final = read_rows(win) or rows_before
-        close_auth_window(win)
-        sp = _p("state_file")
-        if sp:
-            os.makedirs(os.path.dirname(sp), exist_ok=True)
-            json.dump({"read_at": datetime.now().isoformat(),
-                       "expiries": {n: (r["expiry"].isoformat() if r.get("expiry") else None)
-                                    for n, r in rows_final.items()}}, open(sp, "w"))
-        result["ok"] = True
-        print(json.dumps(result, ensure_ascii=False))
-        log(f"mode={mode} " + json.dumps(result["rows"], ensure_ascii=False))
-        return 0
-    except Exception as e:
-        log(f"ERROR {e}")
-        print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
-        return 2
+        changed = bridge_request(cfg, "POST", "/wecom/monitor/mode", {"mode": "observe"})
+        if changed.get("mode") != "observe":
+            raise KeeperError("monitor_pause_failed", "Bridge monitor did not enter observe mode")
+        yield
     finally:
-        set_monitor("active")
-        release_renew_lock(lockdir)
+        restored = bridge_request(cfg, "POST", "/wecom/monitor/mode", {"mode": original})
+        if restored.get("mode") != original:
+            raise KeeperError("monitor_restore_failed", "Could not restore the original monitor mode")
+
+
+class Renewal:
+    def __init__(self, cfg, ax, *, clock=time.monotonic, sleep=time.sleep):
+        self.cfg, self.ax, self.clock, self.sleep = cfg, ax, clock, sleep
+        self.rows = cfg["target_rows"]
+        self.app = None
+        self.journal = Path(cfg["state_file"] + ".pending.json")
+        self.identity = hashlib.sha256((cfg["aibotid"] + ":" + cfg["str_aibotid"]).encode()).hexdigest()
+
+    def text(self, node):
+        return clean(self.ax.ax_get(node, "AXTitle")) or clean(self.ax.ax_get(node, "AXValue"))
+
+    def walk(self, root):
+        stack, total = [(root, 0)], 0
+        while stack:
+            node, depth = stack.pop()
+            total += 1
+            if total > 5000 or depth > 40:
+                raise KeeperError("tree_incomplete", "Accessibility tree exceeds inspection limits")
+            yield node
+            stack.extend((n, depth + 1) for n in reversed(self.ax.ax_get(node, "AXChildren") or []))
+
+    def matches(self, node):
+        return any(target_url(self.ax.ax_get(node, key), self.cfg) for key in ("AXURL", "AXValue", "AXTitle"))
+
+    def bound(self, window):
+        matches = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea" and self.matches(n)]
+        if len(matches) != 1:
+            raise KeeperError("identity_unverified", "Expected one authorization page matching both configured bot identifiers")
+        return matches[0]
+
+    def select_window(self):
+        valid = []
+        for window in self.ax.ax_get(self.app, "AXWindows") or []:
+            try:
+                self.bound(window)
+            except KeeperError:
+                continue
+            valid.append(window)
+        if len(valid) > 1:
+            raise KeeperError("ambiguous_window", "Close duplicate authorization windows first")
+        return valid[0] if valid else None
+
+    def focus_window(self, native, window, error="link_not_visible"):
+        self.ax.activate(native)
+        if self.ax.ax_perform(window, "AXRaise") != 0:
+            raise KeeperError(error, "Could not raise the target native window")
+        self.wait(lambda: self.ax.ax_get(self.app, "AXFocusedWindow"), lambda focused: focused == window,
+                  error, timeout=3)
+
+    def contains(self, outer, inner):
+        if not outer or not inner:
+            return False
+        x, y, w, h = inner
+        ox, oy, ow, oh = outer
+        return w > 0 and h > 0 and ow > 0 and oh > 0 and ox <= x and oy <= y and x + w <= ox + ow and y + h <= oy + oh
+
+    def visible_links(self, windows):
+        links = []
+        for window in windows:
+            stack, total = [(window, 0, [self.ax.frame(window)])], 0
+            while stack:
+                node, depth, clips = stack.pop()
+                total += 1
+                if total > 5000 or depth > 40:
+                    raise KeeperError("tree_incomplete", "Accessibility tree exceeds inspection limits")
+                role = self.ax.ax_get(node, "AXRole")
+                if role == "AXScrollArea":
+                    clips = [*clips, self.ax.frame(node)]
+                if role == "AXLink" and self.matches(node):
+                    bounds = self.ax.frame(node)
+                    if bounds and all(self.contains(clip, bounds) for clip in clips):
+                        links.append((bounds[1], node, window))
+                stack.extend((n, depth + 1, clips) for n in self.ax.ax_get(node, "AXChildren") or [])
+        return links
+
+    def open(self, existing_only=False, send_link=False, activate=False):
+        native, self.app = self.ax.application()
+        current = self.select_window()
+        if current is not None:
+            if activate:
+                self.focus_window(native, current, "page_not_open")
+            return current
+        if existing_only:
+            raise KeeperError("page_not_open", "Open the target bot's permissions page first")
+        if send_link:
+            link = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?" + urlencode({
+                "from": "chat", "forceInnerBrowser": "1", "aibotid": self.cfg["aibotid"],
+                "str_aibotid": self.cfg["str_aibotid"], "type": "1"})
+            response = bridge_request(self.cfg, "POST", "/wecom/send", {
+                "to": self.cfg["bot_chat_name"], "message": "授权续期入口 " + link,
+                "idempotency_key": "wecom-renew-" + str(time.time_ns())})
+            if response.get("success") is not True:
+                raise KeeperError("link_delivery_failed", "Bridge did not confirm link delivery")
+        self.ax.activate(native)
+        self.sleep(1)
+        links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
+        if not links and self.cfg.get("chat_history_navigation", False):
+            # 多组织账号：桌面停在别的组织时导航必失败——先确保在目标组织（2026-11-06）。
+            from keeper_organization import ensure_organization
+            ensure_organization(self, native)
+            from keeper_navigation import open_chat_history
+            open_chat_history(self, native)
+            links = self.visible_links(self.ax.ax_get(self.app, "AXWindows") or [])
+        if not links:
+            raise KeeperError("link_not_visible", "Open the target chat and make its authorization link visible")
+        _, _, chat = max(links, key=lambda item: item[0])
+        self.focus_window(native, chat)
+        # Never click a stale node or a background-window coordinate. Re-read
+        # the selected window and all scroll clipping after it has been raised.
+        if chat not in (self.ax.ax_get(self.app, "AXWindows") or []):
+            raise KeeperError("link_not_visible", "Target link window disappeared")
+        links = self.visible_links([chat])
+        if not links:
+            raise KeeperError("link_not_visible", "Verified link is no longer visible")
+        _, link, chat = max(links, key=lambda item: item[0])
+        self.ax.click(link, chat)
+        return self.wait(self.select_window, lambda value: value is not None, "page_not_open")
+
+    def wait(self, read, accept, error, timeout=20):
+        deadline = self.clock() + timeout
+        while True:
+            value = read()
+            if accept(value):
+                return value
+            if self.clock() >= deadline:
+                raise KeeperError(error, "Timed out waiting for verified UI state")
+            self.sleep(0.5)
+
+    def close_window(self):
+        """Close only the verified standalone target window; never navigate or type."""
+        _, self.app = self.ax.application()
+        window = self.select_window()
+        if window is None:
+            return {"ok": True, "mode": "close-window", "closed": False}, 0
+        self.bound(window)
+        pages = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXWebArea"]
+        button = self.ax.ax_get(window, "AXCloseButton")
+        if (len(pages) != 1 or button is None
+                or self.ax.ax_get(button, "AXRole") != "AXButton"
+                or self.ax.ax_get(button, "AXSubrole") != "AXCloseButton"):
+            raise KeeperError("window_close_unavailable", "No unambiguous native close control for the target page")
+        self.bound(window)
+        if self.ax.ax_perform(button, "AXPress") != 0:
+            raise KeeperError("window_close_failed", "Target window rejected its native close action")
+        self.wait(lambda: self.ax.ax_get(self.app, "AXWindows") or [],
+                  lambda windows: window not in windows, "window_close_failed", timeout=3)
+        return {"ok": True, "mode": "close-window", "closed": True}, 0
+
+    def read_rows(self, window):
+        page = self.bound(window)
+        elements = []
+        for node in self.walk(page):
+            role, text, bounds = self.ax.ax_get(node, "AXRole"), self.text(node), self.ax.frame(node)
+            if role in {"AXStaticText", "AXButton"} and text and bounds:
+                elements.append((text, node, bounds, role))
+        # Capability descriptions can repeat the heading (e.g. contacts).
+        # Headings share the leftmost column; description chips are indented.
+        columns = [e[2][0] for e in elements if e[0] in CAPABILITY_LABELS.union(self.rows)]
+        heading_x = min(columns) if columns else None
+        headings = [e for e in elements if heading_x is not None and abs(e[2][0] - heading_x) <= 2]
+        result = {}
+        for name in self.rows:
+            anchors = [e for e in headings if e[0] == name]
+            row = {"status": "missing", "expiry": None, "btn": None, "authorized": None}
+            if len(anchors) == 1:
+                x, y, _, _ = anchors[0][2]
+                # A narrow row band, with positive evidence required. Ambiguity fails closed.
+                next_rows = [e[2][1] for e in headings
+                             if e[0] in CAPABILITY_LABELS.union(self.rows)
+                             and abs(e[2][0] - x) < 40 and e[2][1] > y]
+                limit = min([y + 70, *next_rows])
+                nearby = [e for e in elements if e[2][0] - x > 80 and y - 8 <= e[2][1] < limit]
+                dates = [parse_expiry(e[0]) for e in nearby if e[0].startswith("有效期至")]
+                buttons = [e[1] for e in nearby if e[0] == "授权" and e[3] == "AXButton"]
+                granted = [e[1] for e in nearby if e[0] == "已授权"]
+                row["status"] = "unknown"
+                if len(buttons) == 1 and not granted and not dates:
+                    row.update(status="expired", btn=buttons[0])
+                elif not buttons and len(granted) == 1 and len(dates) == 1 and dates[0] is not None:
+                    row.update(status="authorized" if dates[0] > datetime.now() else "expired",
+                               expiry=dates[0], authorized=granted[0])
+            elif len(anchors) > 1:
+                row["status"] = "unknown"
+            result[name] = row
+        return result
+
+    def click(self, window, element):
+        self.bound(window)  # Recheck identity immediately before every action.
+        if element is None:
+            raise KeeperError("control_missing", "Expected action control is missing")
+        self.ax.click(element, self.bound(window))
+
+    def named(self, window, text, role=None):
+        return [n for n in self.walk(window) if self.text(n) == text and (role is None or self.ax.ax_get(n, "AXRole") == role)]
+
+    def authorize(self, window, name, old_expiry=None):
+        for _ in range(3):
+            row = self.read_rows(window)[name]
+            if row["status"] == "authorized" and (old_expiry is None or row["expiry"] > old_expiry):
+                return row
+            if row["status"] != "expired" or row["btn"] is None:
+                raise KeeperError("row_not_actionable", "Permission is not in a verifiable grantable state")
+            self.click(window, row["btn"])
+            deadline = self.clock() + 15
+            confirmed = False
+            while self.clock() < deadline:
+                self.sleep(0.5)
+                row = self.read_rows(window)[name]
+                if row["status"] == "authorized" and (old_expiry is None or row["expiry"] > old_expiry):
+                    return row
+                # 2026-10-27 实证：授权提交触发 aegis.qq.com 风控校验，域名被 NextDNS 类
+                # DNS 拦截时内嵌浏览器弹「访问链接存在安全风险」，须人工长按「继续访问」
+                # （合成鼠标事件无效）——快速失败并给出精准处置指引
+                if self.named(window, "继续访问", "AXButton"):
+                    raise KeeperError(
+                        "security_intercept",
+                        "aegis.qq.com 被 DNS 拦截（安全风险拦截页）：在授权页长按『继续访问』，"
+                        "或将其真实 IP 写入 /etc/hosts / 在拦截服务加 Allow 后重试")
+                if not confirmed:
+                    candidates = [n for n in self.walk(window) if self.ax.ax_get(n, "AXRole") == "AXButton"
+                                  and self.text(n) in {"发送", "确认", "确定", "重新授权", "同意"}]
+                    if len(candidates) > 1:
+                        raise KeeperError("ambiguous_confirmation", "Multiple confirmation controls in target window")
+                    if candidates:
+                        self.click(window, candidates[0])
+                        confirmed = True
+        raise KeeperError("renew_failed", "Permission did not become authorized with an updated expiry")
+
+    def recover_pending(self, window):
+        if not self.journal.exists():
+            return
+        pending = json.loads(self.journal.read_text())
+        name = pending.get("row")
+        if pending.get("identity") != self.identity or name not in self.rows:
+            raise KeeperError("pending_mismatch", "Recovery journal belongs to a different target")
+        old = datetime.fromisoformat(pending["expiry_before"])
+        self.authorize(window, name, old)
+        self.journal.unlink()
+
+    def pre_renew(self, window, name, row):
+        old = row["expiry"]
+        self.click(window, row["authorized"])
+        menu = self.wait(lambda: self.named(window, "取消授权"), lambda items: len(items) == 1, "revoke_menu_missing")
+        self.click(window, menu[0])
+        confirm = self.wait(lambda: self.named(window, "取消授权", "AXButton"), lambda items: len(items) == 1, "revoke_confirmation_missing")
+        # Persist BEFORE revocation. Next --renew resumes restoration before other work.
+        atomic_json(self.journal, {"identity": self.identity, "row": name, "expiry_before": old.isoformat()})
+        try:
+            self.click(window, confirm[0])
+            self.wait(lambda: self.read_rows(window)[name], lambda r: r["status"] == "expired" and r["btn"] is not None, "revoke_not_confirmed")
+            self.authorize(window, name, old)
+        except Exception:
+            # Recovery gets priority over another permission. Never issue another revoke.
+            try:
+                self.authorize(window, name, old)
+            except Exception as recovery:
+                raise KeeperError("needs_user_action", "Pre-renewal interrupted; pending recovery saved. Run --renew or restore this permission in WeCom") from recovery
+            self.journal.unlink()
+            return
+        self.journal.unlink()
+
+    def run(self, mode, existing_only=False, within_hours=24):
+        # Inspection does not send messages or alter bridge state.
+        cfg = self.cfg if mode != "check" else {**self.cfg, "bridge_monitor": False}
+        with monitor_guard(cfg):
+            window = self.open(existing_only, mode != "check" and self.cfg.get("bridge_send_link", False), activate=mode != "check")
+            before = self.wait(lambda: self.read_rows(window),
+                               lambda rows: all(r["status"] in {"authorized", "expired"} for r in rows.values()), "rows_incomplete")
+            if mode != "check":
+                self.recover_pending(window)
+                for name in self.rows:
+                    row = self.read_rows(window)[name]
+                    if row["status"] == "expired":
+                        self.authorize(window, name, row["expiry"])
+                    elif mode == "pre-renew" and row["status"] == "authorized" and row["expiry"] <= datetime.now() + timedelta(hours=within_hours):
+                        self.pre_renew(window, name, row)
+                    elif row["status"] != "authorized":
+                        raise KeeperError("rows_incomplete", "Permission changed to an unknown state")
+            after = self.read_rows(window)
+            healthy = all(r["status"] == "authorized" for r in after.values()) and not self.journal.exists()
+            result = {"ok": healthy, "mode": mode, "rows": {n: {
+                "status": r["status"], "expiry": r["expiry"].isoformat(timespec="minutes") if r["expiry"] else None,
+                "expiry_before": before[n]["expiry"].isoformat(timespec="minutes") if before[n]["expiry"] else None,
+            } for n, r in after.items()}, "pending_recovery": self.journal.exists()}
+            if not healthy:
+                result["error"] = "permissions_not_healthy"
+            atomic_json(self.cfg["state_file"], {**result, "read_at": datetime.now().isoformat()})
+            return result, 0 if healthy else 2
+
+
+def doctor(cfg):
+    checks = {"macos": sys.platform == "darwin"}
+    for module in ("AppKit", "Quartz", "ApplicationServices"):
+        checks[module] = importlib.util.find_spec(module) is not None
+    try:
+        executable(cfg.get("wecom_cli"), "wecom-cli")
+        checks["wecom_cli"] = True
+    except KeeperError:
+        checks["wecom_cli"] = False
+    return {"ok": all(checks.values()), "mode": "doctor", "checks": checks,
+            "gui_access": "not_checked", "note": "No GUI, network, credentials or permission changes performed"}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--config", default=str(Path(__file__).with_name("config.json")))
+    modes = parser.add_mutually_exclusive_group()
+    for option in ("check", "renew", "pre-renew", "doctor", "close-window"):
+        modes.add_argument("--" + option, action="store_true")
+    parser.add_argument("--existing-window", action="store_true", help="Only inspect/use an already-open, identity-verified page")
+    parser.add_argument("--within-hours", type=float, default=24, help="Pre-renew permissions due within this horizon (0..168)")
+    args = parser.parse_args(argv)
+    cfg = None
+    try:
+        if not 0 <= args.within_hours <= 168:
+            raise KeeperError("invalid_arguments", "within-hours must be between 0 and 168", 3)
+        cfg = load_config(args.config)
+        if args.doctor:
+            result = doctor(cfg)
+            code = 0 if result["ok"] else 3
+        else:
+            if sys.platform != "darwin":
+                raise KeeperError("unsupported_platform", "Desktop renewal requires macOS", 3)
+            try:
+                import keeper_ax as ax
+            except ImportError as exc:
+                raise KeeperError("missing_dependency", "Install requirements-macos.txt in this Python environment", 3) from exc
+            mode = "pre-renew" if args.pre_renew else "renew" if args.renew else "check"
+            if mode == "pre-renew" and not args.existing_window:
+                raise KeeperError("invalid_arguments", "Experimental pre-renew requires --existing-window", 3)
+            with process_lock(gui_lock_path(), cfg["lock_wait"]):
+                try:
+                    engine = Renewal(cfg, ax)
+                    result, code = (engine.close_window() if args.close_window else
+                                    engine.run(mode, args.existing_window, args.within_hours))
+                except Exception as exc:
+                    result, code = emit_error(exc)
+                    try:
+                        # Write failures while still holding the GUI lock, so a failed
+                        # process cannot overwrite a newer successful observation.
+                        if not args.close_window:
+                            atomic_json(cfg["state_file"], {**result, "read_at": datetime.now().isoformat(),
+                                                           "pending_recovery": Path(cfg["state_file"] + ".pending.json").exists()})
+                    except OSError:
+                        pass
+    except Exception as exc:
+        result, code = emit_error(exc)
+    print(json.dumps(result, ensure_ascii=False))
+    return code
 
 
 if __name__ == "__main__":

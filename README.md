@@ -1,110 +1,161 @@
-# wecom-auth-keeper —— 企业微信 wecom-cli 能力授权自动续期（授权保活）
+# wecom-auth-keeper
 
-> 解决 wecom-cli（@wecom/cli）「文档」能力授权 **7 天到期必须人工续** 的平台限制。
-> 适用于一切用 wecom-cli 读写在线文档/表格的无人值守项目（询盘登记、报表、同步任务……）。
-> 实战验证：2026-09-14 起在生产环境全自动续期运行（读写双线各真实续期成功，含全程无人值守案例）。
+**企业微信七天能力授权的检测与恢复工具。**
 
-## 一、问题是什么（为什么需要这个方案）
+让依赖 `wecom-cli` 的报表、表格同步和 Agent 工作流，在授权到期时有明确的恢复路径。
 
-wecom-cli 操作文档/表格要过三层门，前两层是自动的，**第三层是本方案要解决的**：
+[![CI](https://github.com/fyaic/wecom-auth-keeper/actions/workflows/repository-checks.yml/badge.svg?branch=main)](https://github.com/fyaic/wecom-auth-keeper/actions/workflows/repository-checks.yml)
+![macOS](https://img.shields.io/badge/platform-macOS-lightgrey)
+![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)
+[![MIT License](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-| 层 | 是什么 | 有效期 | 自动吗 |
-|---|---|---|---|
-| ① Bot ID + Secret | bot 的身份密码（本地 credentials.enc） | 长期 | — |
-| ② 访问 token | 每次调用的通行卡 | **24 小时** | ✅ 到期自动静默刷新（errcode 853004，无感） |
-| ③ **能力授权** | 一个人（成员）点头同意"允许这个 bot 用文档能力" | **7 天，读/写两条独立线** | ❌ **到期报 850003，调用再多也不续期，官方无自动续期机制**（上游 [#87](https://github.com/WecomTeam/wecom-cli/issues/87) 悬置两月"待产品评估"） |
+**简体中文** · [English](README.en.md)
 
-关键实证结论（两周实机观测 + 服务端授权页 UI 直接确认）：
+[快速开始](#快速开始) · [命令参考](#命令参考) · [验证状态](#验证状态) · [临时续期方案](docs/workaround.md) · [完整文档](#完整文档) · [参与贡献](CONTRIBUTING.md)
 
-- 读（搜索与获取文档内容）与写（新建与编辑文档）是**两条独立计时的 7 天线**，锚定各自的授予时刻，到期时刻精确到分（授权页直接显示"有效期至 M/D HH:MM"）；
-- **持续调用不续期**——每天探针 + 真实业务调用，仍按授予时刻整点死亡；
-- 官方 FAQ 称"到期后机器人主动推送续期链接"——**实测从未发生**（创建者收件箱零消息）；
-- 续期 = 在授权页对到期项点一下「授权」，即开新 7 天时钟；已授权项可"取消授权→再授权"预续期（该按钮仅工作台路径页面渲染，自动到达不稳定，见 docs/auth-model.md）。
+## 为什么需要它
 
-## 二、方案架构（三层防线，全无人值守）
+**访问 token 刷新成功，不代表业务能力授权仍然有效。** 在我们的企业微信场景中，文档读取与写入各有独立的七天授权周期；持续调用不会延长有效期，到期后接口返回 `850003`。
 
-```
-每小时 launchd → keepalive-run.sh
-    ├─ 双探针（纯 CLI，零 GUI）：读业务表 + 写 bot 自有测试表各一次
-    ├─ 任一 850003 → renew.py --renew：
-    │     链接消息在/发进机器人聊天 → 点击气泡 AXLink（聊天区 AX 最稳定）
-    │     → 企微内置浏览器打开「可使用权限」页（登录会话现成，零扫码）
-    │     → 页面为规整 AXWebArea：能力名/已授权/有效期至/授权按钮全可读
-    │     → 点击到期行的「授权」按钮（轮询确认 ≤30s×3 补点，处理确认弹窗）
-    │     → 复读验证新有效期（+7 天）
-    ├─ 复探双绿确认 → 企微通知创建者（✅成功 / ⚠️需人工）
-    └─ 业务侧自愈（可选，集成到调用方）：调用撞 850003 → 当场触发 renew → 重试一次
-```
+wecom-auth-keeper 使用已登录的 macOS 企业微信桌面会话，检测失效、操作官方授权页面，再通过 CLI 验证恢复结果。原生 Accessibility 适配层已内置，无需额外的 bridge 源码。
 
-死窗分析：到期 → 下一整点探针最长 1 小时；期间业务任务由"调用侧自愈"吸收（自动续期 + 重试，约多等 1 分钟）；最坏情况（自动续期自身失败）每小时自动重试 + ⚠️通知人工兜底。
+- **明确知道哪里失败**：分别检测文档读写能力，输出结构化 JSON 和非零失败退出码。
+- **恢复前确认目标**：校验授权页中的机器人身份；页面不完整、身份不符或结果不明时停止操作。
+- **为中断留下恢复路径**：进程锁、原子状态文件、预续期恢复记录，以及可选的去重通知。
 
-## 三、部署（10 分钟）
+> [!IMPORTANT]
+> 当前为实验性运维工具，需要常驻、已登录且可操作的 Mac。已有文档读写、通讯录的页面预续期记录；2026-10-23 新增单机后台聊天记录导航、发送消息权限预续期及同 Bot 会话查询实测。跨设备、锁屏和跨周期运行仍待验收。新版入口仅在企业微信 **5.0.12.95037 中文版**实测，旧版兼容性未知，参见[兼容与升级](docs/compatibility.md)。详见[验证状态](#验证状态)。
 
-### 前置
+## 多权限定时提前续期
 
-1. macOS 企微桌面端**常驻登录**（会话属于能授权该 bot 的成员；机器不休眠——`caffeinate` 常驻或设置永不睡眠）；
-2. 已装 wecom-cli（`npm i -g @wecom/cli`）并完成 `auth init`（绑定目标 bot）；
-3. 一个 pyobjc 环境（本仓库只借用其 AX 库；任何含 `pyobjc-framework-Quartz` 的 venv 均可）；
-4. （可选）wecom-bridge HTTP 服务——用于自动把链接发进聊天 + 收通知；不配则复用聊天中已有的授权链接（静态地址、历史消息永久可点）。
-
-### 步骤
+新增独立入口 `maintain.py`，无需 Gateway 或 Codex：同一份 `target_rows` 可同时维护消息、文档、微盘、邮箱等权限，默认每小时检查、提前 24 小时逐项续期，完成后自动关页。每项单独保存进度和冷却，中断时优先恢复。
 
 ```bash
-git clone <本仓库> && cd wecom-auth-renew
-cp config.example.json config.json   # 已 gitignore，填入：
-#   bot_chat_name   机器人会话名（在企微里跟 bot 的聊天标题）
-#   aibotid / str_aibotid  从任意一次 850003 报错的 help_message 续期链接里取参数
-#   read_docid      业务侧任一 bot 可读的表格 docid（读探针用）
-#   write_docid/write_sheet  bot 自建一张测试表（写探针用，别用业务表）
-#   venv_python / wecom_bridge_src  指向 pyobjc venv 与其 src 目录
-#   notify_to / bridge_url  通知接收人 + bridge 地址（不配则不发通知）
-# 先验证只读模式：
-<venv_python> renew.py --config config.json --check
-# 应输出两条权限线的 authorized + 有效期，与授权页一致
-# 装 launchd（每小时）：
-cp scripts/com.fyaic.wecomacl-renew.plist.example ~/Library/LaunchAgents/<改路径>.plist
-launchctl load ~/Library/LaunchAgents/<...>.plist
+# 使用 config.maintenance.example.json 配置所需能力
+.venv/bin/python maintain.py --config /absolute/private/keeper.json
+# 列出可配置的权限目录，不访问企业微信
+.venv/bin/python maintain.py --list-capabilities
 ```
 
-### 业务侧自愈（推荐给调用方集成）
+部署步骤与定时任务生成见[多权限定时维护](docs/scheduled-maintenance.md)。新入口按 GUI 有效期调度，不运行文档写探针，也不把页面成功当成业务 API 已验证。下方旧 `keepalive.py` 仍是文档双探针到期恢复入口。
 
-调用 wecom-cli 的代码在收到 `errcode=850003` 时：调 `renew.py --renew`（有并发锁，可与保活并行）→ 原调用重试一次。参考实现见 [wecom-lead-register 的 cli() 钩子](../wecom-lead-register/skill/register.py)。
+## 快速开始
 
-## 四、已知边界与注意事项
+**前置条件：** macOS、Python 3.11+、已登录的企业微信，以及已完成目标 bot 授权的 `wecom-cli`。桌面操作需要 macOS 辅助功能权限。
 
-- **2026-10-27 授权页改版**：确认弹窗变为「发送/取消」——click_renew 确认词已加「发送」（旧词连败 11 次的根因）；行状态判定逻辑不变（授权按钮在=expired，已授权行显示"有效期至"）；
-- **安全拦截页（aegis.qq.com）**：授权提交会触发腾讯风控域名 aegis.qq.com 的校验；若本机 DNS 被 NextDNS/广告拦截类服务污染（解析到 blockpage），内嵌浏览器弹「访问链接存在安全风险」，**必须人工长按「继续访问」**——合成鼠标事件（含长按变体）全部无效。脚本已内置检测（结果带 `blocked:"security_intercept"` 快速失败），运维正解：`/etc/hosts` 写死真实 IP（DoH 查询，如 `113.240.72.84 aegis.qq.com`）或在拦截服务后台加 Allow；代理用户另建议系统 bypass 加 `*qq.com`；
-- **取消授权按钮**：仅工作台路径页面渲染（悬停/点击可唤出），内置浏览器版页面不渲染——故本方案采用"到期后点授权"；预续期（取消→重授权）自动化路线的踩坑记录见 docs/auth-model.md §5；
-- 授权页控件读取的三个坑（都已在本仓库代码内处理）：零宽字符清洗（`\u200b`）、AXTitle-or-AXValue 双取、相对坐标关联（抗窗口位移）；
-- **launchd 无工作目录**：bridge 类依赖从 cwd 找 .env——本仓库 renew.py 已在 import 前 chdir，集成时勿删；
-- 探针写目标必须是 **bot 自有的测试表**（写时间戳无害化）；不要探针写业务表；
-- 企微桌面端离线/重启中：探针照常报错、续期跳过，下一整点自动重试；连续失败会持续 ⚠️ 通知；
-- CEF 输入合成（CGEvent 打字/粘贴）对企微网页面板**无效**——本方案全程不需要打字（点击 + 链接复用），如需输入请用 System Events AppleScript 定向按键（见 docs/auth-model.md §4）。
+### 1. 安装
 
-## 五、稳定性状态（选型前必读）
+```bash
+git clone https://github.com/fyaic/wecom-auth-keeper.git
+cd wecom-auth-keeper
+python3 -m venv .venv
+.venv/bin/python -m pip install -r requirements-macos.txt
+cp config.example.json config.json
+```
 
-| 能力 | 状态 | 依据 |
-|---|---|---|
-| 双探针检测（CLI） | ✅ 生产验证 | 2026-09-10 起每小时运行，两次到期均被准确捕获 |
-| 聊天链接→内置浏览器开授权页 | ✅ 生产验证 | 8+ 次成功（含两次真实续期），通道零失败 |
-| 到期行点「授权」续期 | ✅ 生产验证×2 周期 | 9/14 双线成功（其一无人值守）；9/21 加固版双线**首击即中**（38s/78s 完成检测→双绿）；10-27 适配改版页（发送弹窗+拦截检测） |
-| 通知 / 失败告警 | ✅ 生产验证 | 成功与失败通知均实测送达 |
-| 业务侧自愈（撞 850003 自动续+重试） | ✅ 代码就绪，随主链路 | 依赖同一续期通道 |
-| 预续期（取消授权→再授权，消除到期空窗） | ⛔ 已封存（2026-09-19） | 工作台落地页动态变脸致入口不可达（9 尝试归档 auth-model.md）；死窗 ≤1h 由业务自愈吸收 | 「取消授权」按钮仅工作台路径页面渲染且悬停显现；桌面自动化到达该页不稳定。当前架构下到期空窗（≤1 小时）由业务侧自愈吸收，对业务无感 |
+### 2. 填写本地配置
 
-**已知运维边界**：launchd 环境坑（无 cwd）已内建规避；企微桌面端必须常驻登录；机器不可休眠。
+按[部署指南](docs/getting-started.md)编辑 `config.json`，填写目标机器人身份、探针表格，以及本仓库 `.venv/bin/python3` 的绝对路径。CLI 凭据应属于同一 bot。
 
-## 六、文件清单
+**写探针会覆盖指定测试子表的 A1 单元格，请使用专用测试表。** bridge 仅用于可选的链接投递、通知和 monitor 协调，默认关闭。
 
-| 文件 | 作用 |
+### 3. 检查环境与权限
+
+```bash
+# 只检查本地配置、平台与依赖，不操作 GUI
+.venv/bin/python renew.py --config config.json --doctor
+
+# 在企业微信中打开目标 bot 的“可使用权限”页后检查
+.venv/bin/python renew.py --config config.json --check --existing-window
+```
+
+`--check` 不改授权、不发消息、不改 monitor，但会写本地状态。只有能确认页面身份及完整权限状态时才返回健康结果。
+
+## 命令参考
+
+以下命令均在仓库目录执行。运行结果为 JSON；[退出码与迁移说明](docs/getting-started.md#命令与退出码)见部署指南。
+
+| 目的 | 命令 |
 |---|---|
-| `renew.py` | 核心：开授权页、读权限线状态、点授权续期（--check/--renew） |
-| `scripts/probe.sh` | 双探针（读+写，纯 CLI） |
-| `scripts/keepalive-run.sh` | 每小时联动主循环（探针→850003→renew→复探→通知） |
-| `scripts/com.fyaic.wecomacl-renew.plist.example` | launchd 模板 |
-| `config.example.json` | 配置模板（复制为 config.json，已 gitignore） |
-| `docs/auth-model.md` | 授权模型全档：发现过程、实证时间线、机制定论、踩坑实录 |
+| 检测文档读写能力，写入专用测试表 | `.venv/bin/python probe.py --config config.json` |
+| 恢复已到期权限 | `.venv/bin/python renew.py --config config.json --renew` |
+| 完整保活：探测 → 恢复 → 复探 | `.venv/bin/python keepalive.py --config config.json` |
+| 实验性预续期：处理 24 小时内到期的权限 | `.venv/bin/python renew.py --config config.json --pre-renew --existing-window --within-hours 24` |
 
-## 七、来源与致谢
+到期恢复可复用已打开的权限页，或点击当前聊天中可见的目标授权链接。**预续期要求提前打开目标权限页**；脚本会将目标控件滚动到可见位置，管理列表自动导航尚未实现。取消与重授之间会有短暂未授权窗口。
 
-本方案诞生于一个外贸团队的无人值守询盘登记项目两周生产实战，上游反馈沉淀于 [WecomTeam/wecom-cli#134](https://github.com/WecomTeam/wecom-cli/issues/134)（读 850003 写绿首例 + 双 7 天线实证 + 续期链接通道发现）。授权模型的完整取证记录见 `docs/auth-model.md`。
+也可显式配置 `"chat_history_navigation": true`：当页面和链接都不可见时，程序从原生搜索栏查找
+`bot_chat_name`，核对会话标题，再在聊天记录中搜索 `authorizationList`，只点击同时匹配两个
+机器人标识的官方 HTTPS 链接。这条路径不发送消息、不依赖 bridge，也不经过机器人管理列表。
+目标聊天必须已保存过该机器人的官方授权链接。没有链接、标题不符、焦点被抢占或页面身份不符时停止。
+`--existing-window` 仍禁止导航；自动预续期调用方应先以不带该参数的 `--check` 打开并验证页面，
+再调用 `--pre-renew --existing-window`。完整周期结束后可运行 `--close-window`，仅关闭身份匹配的权限窗口；Gateway 可选自动清理配置见[部署指南](docs/getting-started.md#周期结束后关闭权限页)。原生导航的适用范围与实测结果见[验证记录](docs/validation.md)。
+
+确认单次运行符合预期后，可按[部署指南](docs/getting-started.md#每小时保活)安装每小时 launchd 任务。该任务执行到期后恢复，不会自动执行 `--pre-renew`。调度和业务重试无法保证零中断。
+
+## 工作方式
+
+```mermaid
+flowchart LR
+    A[CLI 读写探针] --> B{850003 或待恢复记录?}
+    B -->|是| C[校验目标授权页]
+    C --> D[恢复权限]
+    D --> E[CLI 复探]
+    B -->|否| F[报告探针状态]
+    E --> G[记录结果与可选通知]
+    F --> G
+```
+
+GUI 显示成功和实际 API 可用是两层验证。保活要求恢复命令与读写复探同时通过；网络或其他 API 错误会报告失败，不盲目触发授权操作。
+
+### 只续期指定权限
+
+在配置文件中使用 `target_rows` 白名单，填写页面上的能力行名称。例如只续期文档读写和通讯录：
+
+```json
+"target_rows": ["新建与编辑文档", "搜索与获取文档内容", "搜索企业成员"]
+```
+
+未列出的权限不会被操作。只需要文档读取时，可只保留 `搜索与获取文档内容`。这不是界面勾选器：需要编辑配置；页面上的“授权”也可能表示从未授权，请只填写你确实希望授予机器人的能力。`keepalive.py` 当前业务探针仅覆盖文档读写，通讯录续期验证的是页面状态和有效期。
+
+## 验证状态
+
+| 证据 | 已确认 | 未覆盖 |
+|---|---|---|
+| 10/23 后台实测 | 从其他群聊自行进入权限页、消息权限取消重授、同 Bot CLI 会话查询 | 跨设备、锁屏、管理页起点、跨七天周期 |
+| 原版本生产记录 | 作者报告 9/14、9/21 到期恢复成功；9/21 两线恢复耗时 38 秒、78 秒 | 新版实现的可靠性、跨账号成功率 |
+| 9/21 桌面代理实测 | 未到期文档读写权限取消后重授，新有效期延至七天后；重开页面复核一致 | 新版独立代码的真实重授权 |
+| 9/22 独立脚本实测 | 三项权限由 9/22 18:39 更新至 9/29 16:18，重开页面复核一致 | 业务 API 复探、完整导航、跨周期运行 |
+| 当前自动化回归 | 状态判定、身份校验、中断恢复、进程入口与原生 AX 几何转换；Linux/macOS CI | 完整 GUI 导航、真实业务与跨周期验收 |
+
+查看[完整验证记录](docs/validation.md)、[已知限制](docs/known-limitations.md)和[后续验收计划](docs/roadmap.md)。七天周期来自实测，不代表所有能力、账号或未来版本的平台契约。
+
+## 完整文档
+
+| 文档 | 内容 |
+|---|---|
+| [部署指南](docs/getting-started.md) | 配置、命令、预续期恢复、调度、退出码 |
+| [官方支持核查](docs/official-status.md) | 2026-09-23 官方版本、源码、文档与 issue 状态 |
+| [临时续期方案](docs/workaround.md) | 适用条件、最小复现、自动化边界与上游讨论 |
+| [授权模型](docs/auth-model.md) | token 与能力授权的区别、历史取证和排障经验 |
+| [验证记录](docs/validation.md) | 实机结果及其适用范围 |
+| [已知限制](docs/known-limitations.md) | 当前边界与迁移注意事项 |
+| [路线图](docs/roadmap.md) | 下一阶段工作及验收条件 |
+| [变更记录](CHANGELOG.md) | 功能变化和兼容性说明 |
+
+## 开发与贡献
+
+不需要真实账号即可运行回归测试；macOS 安装原生依赖后还会执行 AX 值转换测试。
+
+```bash
+.venv/bin/python scripts/check_repository.py
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+欢迎贡献**稳定导航、客户端兼容性报告、外部实机复现与跨周期验证**。请先阅读[贡献指南](CONTRIBUTING.md)，通过 [Issue 模板](https://github.com/fyaic/wecom-auth-keeper/issues/new/choose)提供脱敏复现；敏感问题请遵循[安全报告说明](SECURITY.md)。
+
+## 来源与许可
+
+本项目起源于企业微信无人值守文档工作流的实际授权问题。上游讨论：[WeCom CLI #87](https://github.com/WecomTeam/wecom-cli/issues/87)、[#134](https://github.com/WecomTeam/wecom-cli/issues/134)。项目由社区维护，与腾讯/企业微信无隶属关系，不提供官方续期 API。
+
+[MIT License](LICENSE) © 2026 fyaic

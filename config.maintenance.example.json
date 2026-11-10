@@ -1,0 +1,26 @@
+{
+  "bot_chat_name": "<目标机器人完整会话名>",
+  "aibotid": "<授权链接中的 aibotid>",
+  "str_aibotid": "<授权链接中的 str_aibotid>",
+  "target_rows": [
+    "发送消息",
+    "搜索与获取文档内容",
+    "搜索与获取微盘文件内容",
+    "搜索与获取邮件内容"
+  ],
+  "chat_history_navigation": true,
+  "bridge_send_link": false,
+  "bridge_monitor": false,
+  "venv_python": "/absolute/path/to/wecom-auth-keeper/.venv/bin/python3",
+  "state_file": "~/.wecom-auth-renew/example-bot/state.json",
+  "log_file": "~/.wecom-auth-renew/example-bot/run.log",
+  "renew_timeout": 240,
+  "lock_wait": 10,
+  "maintenance": {
+    "within_hours": 24,
+    "interval_seconds": 3600,
+    "min_renew_interval_seconds": 3600,
+    "retry_seconds": 300,
+    "close_window": true
+  }
+}
