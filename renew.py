@@ -411,18 +411,32 @@ class Renewal:
         self.journal.unlink()
 
     def prepare_revoke(self, window, name, old):
+        # A leftover final confirmation is not the navigation menu. In
+        # particular, AXPress on its obscured "已授权" anchor can be a no-op;
+        # never let the next name-only lookup click that existing final button.
+        if self.named(window, '取消授权', 'AXButton'):
+            raise KeeperError('revoke_menu_unverified', 'Existing final revoke confirmation blocks preparation')
         row = self.read_rows(window)[name]
         if row['status'] != 'authorized' or row['expiry'] != old:
             raise KeeperError('row_changed', 'Permission changed before opening revoke menu')
         self.click(window, row['authorized'])
-        menu = self.wait(lambda: self.named(window, '取消授权'), lambda items: len(items) == 1, 'revoke_menu_missing')
-        if ('AXPress' not in self.ax.action_names(menu[0])
-                and self.ax.ax_get(menu[0], 'AXRole') == 'AXStaticText'):
+
+        def navigation_menu():
+            items = self.named(window, '取消授权')
+            # Only the calibrated text menu may open the final dialog. The
+            # AXButton with the same label is reserved for pre_renew, after
+            # durable phase/pending records exist. Unknown roles fail closed.
+            if any(self.ax.ax_get(item, 'AXRole') != 'AXStaticText' for item in items):
+                raise KeeperError('revoke_menu_unverified', 'Revoke navigation contains a final button or unknown control')
+            return items
+
+        menu = self.wait(navigation_menu, lambda items: len(items) == 1, 'revoke_menu_missing')
+        if 'AXPress' not in self.ax.action_names(menu[0]):
             native, _ = self.ax.application()
             self.focus_window(native, window, 'revoke_menu_unverified')
             page = self.bound(window)
             # Re-read after focusing; no cached element or confirmation button.
-            menu = self.named(window, '取消授权')
+            menu = navigation_menu()
             current = self.read_rows(window)[name]
             if (len(menu) != 1 or self.named(window, '取消授权', 'AXButton')
                     or current['status'] != 'authorized' or current['expiry'] != old):

@@ -202,6 +202,46 @@ class StateTests(Fixture):
         self.assertEqual(sum(text=='取消授权' for text,_ in ax.clicks),4)
         self.assertTrue(all(r['expiry']>r['expiry_before'] for r in result['rows'].values()))
 
+    def test_preparation_rejects_existing_final_confirmation_before_any_click(self):
+        ax=FakeAX(self.cfg);engine=self.engine(ax)
+        name=self.cfg['target_rows'][0]
+        # A previous interaction left a final dialog on the identity-bound page.
+        ax.confirm=name;ax.refresh()
+        phases=[]
+        with self.assertRaises(KeeperError) as caught:
+            engine.pre_renew(ax.window,name,engine.read_rows(ax.window)[name],
+                             before_revoke=lambda:phases.append('revoking'))
+        self.assertEqual(caught.exception.code,'revoke_menu_unverified')
+        self.assertTrue(caught.exception.revocation_not_attempted)
+        self.assertEqual(ax.states[name],'authorized')
+        self.assertEqual(ax.clicks,[])
+        self.assertEqual(phases,[])
+        self.assertFalse(engine.journal.exists())
+
+    def test_preparation_rejects_final_or_unknown_control_appearing_as_menu(self):
+        name=self.cfg['target_rows'][0]
+        for role in ('AXButton','AXMenuItem'):
+            with self.subTest(role=role):
+                ax=FakeAX(self.cfg);engine=self.engine(ax)
+                original=ax.click
+                def click(element, window, **kwargs):
+                    original(element,window,**kwargs)
+                    if element['AXTitle']=='已授权':
+                        # The next tree exposes a final button (or an unknown
+                        # menu layout), not the calibrated navigation text.
+                        ax.menu=None;ax.refresh()
+                        ax.page['AXChildren'].append(node(role,'取消授权',_row=name))
+                phases=[]
+                with patch.object(ax,'click',side_effect=click), self.assertRaises(KeeperError) as caught:
+                    engine.pre_renew(ax.window,name,engine.read_rows(ax.window)[name],
+                                     before_revoke=lambda:phases.append('revoking'))
+                self.assertEqual(caught.exception.code,'revoke_menu_unverified')
+                self.assertTrue(caught.exception.revocation_not_attempted)
+                self.assertEqual(ax.states[name],'authorized')
+                self.assertEqual(ax.clicks,[('已授权',name)])
+                self.assertEqual(phases,[])
+                self.assertFalse(engine.journal.exists())
+
     def test_pre_renew_skip_not_due(self):
         ax=FakeAX(self.cfg)
         result,code=self.engine(ax).run('pre-renew',True,1)
