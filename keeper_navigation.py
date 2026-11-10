@@ -87,8 +87,15 @@ def chat_header(engine, window, search=None):
         if (bounds and engine.ax.ax_get(node, "AXRole") in {"AXStaticText", "AXTextField"}
                 and bounds[0] >= field[0] + field[2]
                 and abs(bounds[1] - field[1]) < 60 and engine.text(node)):
-            candidates.append(engine.text(node))
-    return candidates[0] if len(candidates) == 1 else None
+            candidates.append((bounds[0], engine.text(node)))
+    if not candidates:
+        return None
+    # 5.0.13 shows a person's department/job title to the right of the
+    # conversation name. Those are metadata, not additional chat headings.
+    # Require a unique leftmost native title; overlapping candidates fail.
+    left = min(x for x, _ in candidates)
+    titles = [text for x, text in candidates if abs(x - left) < 2]
+    return titles[0] if len(titles) == 1 else None
 
 
 def chat_composer(engine, window):

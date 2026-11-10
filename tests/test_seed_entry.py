@@ -68,6 +68,18 @@ class SeedTests(Fixture):
         self.assertEqual(ax.sent, [])
         self.assertEqual(ax.pasted, [])
 
+    def test_department_and_job_title_are_not_extra_chat_headers(self):
+        ax=SeedAX(self.cfg)
+        ax.window['AXChildren'].extend([node('AXStaticText','department',x=600,y=20),
+                                       node('AXStaticText','job title',x=750,y=20)])
+        self.assertEqual(chat_header(self.engine(ax),ax.window),self.cfg['bot_chat_name'])
+        self.assertIs(chat_composer(self.engine(ax),ax.window),ax.composer)
+
+    def test_overlapping_native_headers_remain_ambiguous(self):
+        ax=SeedAX(self.cfg)
+        ax.window['AXChildren'].append(node('AXStaticText','another',x=350,y=20))
+        self.assertIsNone(chat_header(self.engine(ax),ax.window))
+
     def test_message_history_textareas_cannot_be_composer(self):
         ax=SeedAX(self.cfg)
         ax.window['AXChildren'].remove(ax.composer)
