@@ -1,0 +1,5 @@
+# Documentation-only dependencies used for the 2026-11-11 handouts.
+# These are not required to install or run automatic renewal.
+reportlab==4.4.9
+pypdf==6.10.0
+Pillow==13.0.0

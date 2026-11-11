@@ -17,3 +17,6 @@ config-*.json
 !config.example.json
 !config.*.example.json
 inspect2.py
+
+# Rebuilt documentation and local render checks; published snapshots are tracked.
+/build/

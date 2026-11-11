@@ -2,6 +2,8 @@
 
 业务人员 Agent 安装包：[先读我](delivery/START-HERE.md) · [安装 Agent 协议](delivery/AGENT-INSTALL.md) · [首次准备 Bot、组织与私聊](delivery/FIRST-RUN.md) · [Git 审计、跨平台设计与发布边界](delivery/DESIGN.md)。macOS 逐设备验收；Windows 暂无自动续期后端。
 
+**直接分发：[2026-11-11 交付快照](delivery/releases/2026-11-11/README.md)**，包含使用者 PDF、Agent ZIP 和纯人工截图指南；版本标签 `distribution-2026-11-11`。[在线阅读手动步骤](docs/manual-renewal.md) · [PDF 构建与版本维护](delivery/docs/README.md)。
+
 **企业微信七天能力授权的检测与恢复工具。**
 
 让依赖 `wecom-cli` 的报表、表格同步和 Agent 工作流，在授权到期时有明确的恢复路径。

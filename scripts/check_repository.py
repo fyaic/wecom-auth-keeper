@@ -76,11 +76,18 @@ def main():
                 raise ValueError("Invalid example capability allowlist")
         except Exception:
             errors.append(f"{filename}: invalid maintenance policy or capability allowlist")
+    # Keep published binaries and the embedded Agent ZIP tied to their snapshot.
+    from delivery.verify_release import verify as verify_release
+    for manifest in sorted((ROOT / 'delivery/releases').glob('*/release.json')):
+        try:
+            verify_release(manifest.parent)
+        except Exception as exc:
+            errors.append(f"{manifest.relative_to(ROOT)}: {exc}")
     for error in errors:
         print("FAIL:", error)
     if errors:
         return 1
-    print("PASS: Python/Bash syntax, plist, example config and local inline Markdown links")
+    print("PASS: Python/Bash syntax, plist, example config, local Markdown links and release archives")
     print("Not tested: live GUI, authorization renewal, external links or business APIs")
     return 0
 

@@ -8,6 +8,12 @@
 
 ## Unreleased
 
+### Versioned business handouts — 2026-11-11
+
+- Archive the delivered two-page user PDF, five-page manual UI guide and byte-identical reviewed Agent ZIP under `delivery/releases/2026-11-11`, with SHA-256 metadata and a release integrity checker.
+- Track seven selected real WeCom screenshots, a readable manual guide and portable PDF generation scripts; exclude private device configuration, complete chat captures and raw acceptance logs.
+- Add documentation rebuild instructions and the `distribution-2026-11-11` snapshot tag. Runtime remains the reviewed 070f615 implementation, packaged at 2fd6762; documentation packaging does not extend compatibility or device acceptance claims.
+
 ### First-run Bot and chat entry preparation — 2026-11-09
 
 - Pin the user-requested Bot before profile selection. Match its native official identity to a stable CLI inventory; an authorized default profile cannot replace the requested target. New onboarding requires a successful explicit selection record, and existing-entry queries reject profile drift before business calls.

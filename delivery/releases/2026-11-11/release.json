@@ -1,0 +1,58 @@
+{
+  "format": 1,
+  "release_date": "2026-11-11",
+  "git_tag": "distribution-2026-11-11",
+  "branch": "feat/agent-assisted-distribution",
+  "zip_source_commit": "2fd67627c0c7b7f19805e886c329989e5575355c",
+  "tested_runtime_commit": "070f615a2e29fc06047344df308c89d2d60a9b79",
+  "artifacts": {
+    "纯人工手动续期-企业微信Bot图文指南.pdf": {
+      "sha256": "887bfc7fd85f04964e5a0d76849d97423faa7ab6a1e988e65a0c3956ec682d7a",
+      "bytes": 1327429,
+      "pages": 5
+    },
+    "给Agent-wecom-auth-keeper-macos-2fd6762.zip": {
+      "sha256": "f20f4c64313652334b02c3b6236cd710d147d2fd196fbd02e1d11465eca95de5",
+      "bytes": 117789
+    },
+    "给使用者-企业微信Bot自动续期.pdf": {
+      "sha256": "1bd90474c73bc20ac51a07ff3b68fed7d94c9547e3dd185ccad8da32ccf53d78",
+      "bytes": 160685,
+      "pages": 2
+    }
+  },
+  "screenshots": {
+    "directory": "docs/assets/manual-renewal",
+    "sha256": {
+      "02-bot-card.jpg": "953e9a1eded2579c4e9d3e9cf3024c30cbf49eda8cbd13b6c09e8b0749e269a9",
+      "03-bot-details.jpg": "f59c71d518c21f3d00e88af25cce721be7db28de54e4795b08e70301dcb35d1c",
+      "04-permission-expiry.jpg": "d6e843f75c2c76e3c1d60aea88e17b364103e3190499ec21e58818511fffdc08",
+      "05a-revoke-menu.jpg": "0f3a79b8270528a0417500a0e41d188dd18c22449dea0d0906570c85dd21e3f7",
+      "05b-revoke-confirm.jpg": "2a44e0c4ab1a415b5957980eae76f489e0cd350bcbf5ff7cd4c64850fd986e42",
+      "06-grant-button.jpg": "bfd59f3ff5bc90a1c88e8b81958b7505fdd7f1b7b362102cbbc0f5a668df50d8",
+      "07-document-permissions.jpg": "0ac6ad1d710ed3f4a6d4c067af5fffe0d69c0d95665feab2b4841ba296e46ed6"
+    },
+    "captured_at": "2026-11-11",
+    "client": "WeCom 5.0.13.95049 macOS CN",
+    "permission_mutations_executed": false,
+    "format": "JPEG; extension corrected to match captured bytes without re-encoding"
+  },
+  "validation": {
+    "original_pdf_pages_visually_reviewed": 7,
+    "archive_integrity": "sha256_and_embedded_zip_manifest",
+    "zip_byte_identical_to_reviewed_release": true,
+    "runtime_regression_tests_from_2026_11_10": 247,
+    "new_live_renewal_test_for_this_document_release": false,
+    "rebuilt_pdf_pages_pixel_identical_to_original": 7,
+    "local_regression_tests_for_archive_commit": {
+      "passed": 247,
+      "skipped": 0
+    }
+  },
+  "support": {
+    "automation": "macOS requires device-specific acceptance",
+    "windows_automation": false,
+    "workbuddy_live_rehearsal": false,
+    "remote_scope_tested": "发送消息"
+  }
+}
