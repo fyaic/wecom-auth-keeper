@@ -28,9 +28,226 @@ def parse_expiry(text, now=None):
     match = re.search(r"(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})", text)
     if not match:
         return None
+<<<<<<< Updated upstream
     values = [int(v) for v in match.groups()]
     candidates = []
     for year in (now.year - 1, now.year, now.year + 1):
+=======
+
+
+def wecom_pid():
+    out = subprocess.run(["pgrep", "-x", "企业微信"], capture_output=True, text=True)
+    return int(out.stdout.split()[0]) if out.stdout.strip() else None
+
+
+def activate(pid):
+    for a in NSWorkspace.sharedWorkspace().runningApplications():
+        if a.processIdentifier == pid:
+            a.activateWithOptions_(1 << 1)
+            return
+
+
+def find_all(pred, depth_max=24, cap=12):
+    out = []
+
+    def walk(el, depth):
+        if len(out) >= cap or depth > depth_max:
+            return
+        if pred(el):
+            out.append(el)
+            return
+        for k in (ax_get(el, "AXChildren") or []):
+            walk(k, depth + 1)
+
+    for w in (ax_get(_app, "AXWindows") or []):
+        walk(w, 0)
+    return out
+
+
+def window_has_perm(win):
+    flag = [False]
+
+    def walk(el, depth=0):
+        if flag[0] or depth > 10:
+            return
+        if "可使用权限" in str(ax_get(el, "AXTitle") or "") + str(ax_get(el, "AXValue") or ""):
+            flag[0] = True
+            return
+        for k in (ax_get(el, "AXChildren") or []):
+            walk(k, depth + 1)
+
+    walk(win)
+    return flag[0]
+
+
+def send_link_message():
+    """bridge 可用时把续期链接发进机器人聊天（保证最新链接在可视区底部）"""
+    if not CFG.get("bridge_send_link"):
+        return
+    ts = datetime.now().strftime("%Y%m%d%H%M%S")
+    payload = {"to": CFG["bot_chat_name"],
+               "message": f"续期通道（自动，请忽略）{RENEW_URL}",
+               "idempotency_key": f"wlr-renew-{ts}"}
+    # 2026-10-28：海运船期bot 会话在弗忧联盟组织；不带 organization 时桥按
+    # 当前组织（嘀嗒嘀）搜索 → 找不到 → 跨组织重试拖到 120s 超时（全天续期
+    # 失败根因）。显式带组织让发送一步到位。
+    if CFG.get("bot_chat_org"):
+        payload["organization"] = CFG["bot_chat_org"]
+    r = http_json("POST", "/wecom/send", payload, timeout=120)
+    if not r.get("success"):
+        log(f"bridge send failed: {r}")
+
+
+def open_auth_window(pid, retries=2):
+    """点击聊天中的授权链接 → 返回「可使用权限」窗口（重试整轮）"""
+    for attempt in range(retries):
+        send_link_message()
+        activate(pid)
+        time.sleep(1.0)
+        links = find_all(lambda e: str(ax_get(e, "AXRole")) == "AXLink"
+                         and "authorizationList" in str(ax_get(e, "AXValue") or "")
+                         + str(ax_get(e, "AXTitle") or ""))
+        if links:
+            with_frame = [l for l in links if frame(l)]
+            if with_frame:
+                newest = max(with_frame, key=lambda e: frame(e)[1])
+                x, y, w, h = frame(newest)
+                click_at(x + w / 2, y + h / 2)
+            else:
+                rc = ax_perform(links[-1], "AXPress")
+                log(f"link frame missing → AXPress rc={rc}")
+                time.sleep(1.0)
+            for _ in range(20):
+                time.sleep(1.0)
+                for win in (ax_get(_app, "AXWindows") or []):
+                    if window_has_perm(win):
+                        time.sleep(0.8)
+                        return win
+        log(f"auth window not opened (attempt {attempt + 1})")
+        time.sleep(2.0)
+    raise RuntimeError("授权页窗口未能打开（重试耗尽）")
+
+
+def close_auth_window(win):
+    try:
+        cb = ax_get(win, "AXCloseButton")
+        if cb is not None:
+            ax_perform(cb, "AXPress")
+            time.sleep(1.0)
+    except Exception as e:
+        log(f"close window err: {e}")
+
+
+def parse_expiry(text):
+    m = re.search(r"(\d{1,2})/(\d{1,2})\s+(\d{1,2}):(\d{2})", text)
+    if not m:
+        return None
+    mo, d, hh, mm = map(int, m.groups())
+    now = datetime.now()
+    dt = datetime(now.year, mo, d, hh, mm)
+    if dt < now - timedelta(days=180):
+        dt = dt.replace(year=dt.year + 1)
+    return dt
+
+
+def read_rows(win):
+    """返回 {行名: {status: authorized|expired|missing, expiry: dt|None, btn: el|None}}
+    关联规则（相对坐标，抗窗口位移）：状态列元素在行名右侧 Δx>350 且 Δy∈(0,70)"""
+    target_clean = [clean(n) for n in TARGET_ROWS]
+    texts = []
+
+    def walk(el, depth):
+        if depth > 12 or len(texts) > 200:
+            return
+        role = str(ax_get(el, "AXRole"))
+        t = clean(ax_get(el, "AXTitle")) or clean(ax_get(el, "AXValue"))
+        if role == "AXStaticText" and t:
+            texts.append((t, el))
+        elif role == "AXButton" and t == "授权":
+            texts.append((t, el))
+        for k in (ax_get(el, "AXChildren") or []):
+            walk(k, depth + 1)
+
+    walk(win, 0)
+    anchors, expiries, btns = [], [], []
+    for t, el in texts:
+        f = frame(el)
+        if f is None:
+            continue
+        x, y = f[0], f[1]
+        if t in target_clean:
+            anchors.append((x, y, t))
+        elif t.startswith("有效期至"):
+            expiries.append((x, y, parse_expiry(t)))
+        elif t == "授权":
+            btns.append((x, y, el))
+    rows = {}
+    for name in TARGET_ROWS:
+        cname = clean(name)
+        cand = [a for a in anchors if a[2] == cname]
+        if not cand:
+            rows[name] = {"status": "missing", "expiry": None, "btn": None}
+            continue
+        ax_, ay = min((a[0], a[1]) for a in cand)
+        expiry = None
+        btn = None
+        for x, ey, dt in expiries:
+            if x - ax_ > 350 and 0 < ey - ay < 70:
+                expiry = dt if dt else expiry
+        for x, by, el in btns:
+            if x - ax_ > 350 and 0 < by - ay < 70:
+                btn = el
+        rows[name] = {"status": "expired" if btn else "authorized",
+                      "expiry": expiry, "btn": btn}
+    return rows
+
+
+def click_renew(win, name, row, max_tries=3):
+    """点授权并轮询确认（≤30s/轮），未中补点重试——首击偶发未中的闭环加固"""
+    for try_i in range(max_tries):
+        r = row["btn"] if try_i == 0 else None
+        if r is None:
+            r = read_rows(win).get(name, {}).get("btn")
+            if r is None:
+                return  # 行已 authorized——成功
+        f = frame(r)
+        if f is None:
+            return
+        click_at(f[0] + f[2] / 2, f[1] + f[3] / 2)
+        time.sleep(1.5)
+        for _ in range(3):  # 确认弹窗（变体词全收）
+            confirms = find_all(lambda e: str(ax_get(e, "AXRole")) == "AXButton"
+                                and any(k in str(ax_get(e, "AXTitle") or "")
+                                        for k in ("确认", "确定", "重新授权", "同意")))
+            if not confirms:
+                break
+            cf = frame(confirms[0])
+            if cf is None:
+                break
+            click_at(cf[0] + cf[2] / 2, cf[1] + cf[3] / 2)
+            time.sleep(1.2)
+        t0 = time.time()
+        while time.time() - t0 < 30:
+            if read_rows(win).get(name, {}).get("status") == "authorized":
+                return
+            time.sleep(3.0)
+
+
+def acquire_renew_lock(max_wait_s=150):
+    import shutil
+    waited = 0
+    while waited < max_wait_s:
+        if os.path.isdir(RENEW_LOCK):
+            try:
+                if time.time() - os.path.getmtime(RENEW_LOCK) > 300:
+                    shutil.rmtree(RENEW_LOCK, ignore_errors=True)
+                    continue
+            except OSError:
+                pass
+            time.sleep(5)
+            waited += 5
+            continue
+>>>>>>> Stashed changes
         try:
             candidates.append(datetime(year, *values))
         except ValueError:
