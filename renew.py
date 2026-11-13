@@ -171,9 +171,11 @@ class Renewal:
             link = "https://work.weixin.qq.com/ai/aiHelper/authorizationList?" + urlencode({
                 "from": "chat", "forceInnerBrowser": "1", "aibotid": self.cfg["aibotid"],
                 "str_aibotid": self.cfg["str_aibotid"], "type": "1"})
-            response = bridge_request(self.cfg, "POST", "/wecom/send", {
-                "to": self.cfg["bot_chat_name"], "message": "授权续期入口 " + link,
-                "idempotency_key": "wecom-renew-" + str(time.time_ns())})
+            payload = {"to": self.cfg["bot_chat_name"], "message": "授权续期入口 " + link,
+                       "idempotency_key": "wecom-renew-" + str(time.time_ns())}
+            if self.cfg.get("bot_chat_org"):
+                payload["organization"] = self.cfg["bot_chat_org"]
+            response = bridge_request(self.cfg, "POST", "/wecom/send", payload)
             if response.get("success") is not True:
                 raise KeeperError("link_delivery_failed", "Bridge did not confirm link delivery")
         self.ax.activate(native)

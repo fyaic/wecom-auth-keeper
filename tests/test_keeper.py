@@ -241,6 +241,29 @@ class ProbeTests(Fixture):
             probe.run_probes(self.cfg)
         self.assertIn(self.cfg['write_docid'],call.call_args.args[1])
 
+    def test_smartsheet_probe_preserves_production_contract(self):
+        self.cfg.update(read_sheet='q979lj', write_field='智能表列')
+        with patch('probe.executable',return_value='fake-cli'), \
+             patch('probe.call_cli',return_value={'ok':True,'errcode':0}) as call:
+            result = probe.run_probes(self.cfg)
+        self.assertTrue(result['ok'])
+        read_args = call.call_args_list[0].args[1]
+        write_args = call.call_args_list[1].args[1]
+        self.assertEqual(read_args[:3], ['smartsheet','records','list'])
+        payload = json.loads(write_args[-1])
+        self.assertEqual(payload['key_type'],'field_title')
+        self.assertEqual(payload['sheet_id'],self.cfg['write_sheet'])
+        self.assertIn(self.cfg['write_field'],payload['records'][0]['values'])
+
+    def test_link_payload_preserves_explicit_organization(self):
+        self.cfg['bot_chat_org'] = '弗忧联盟'
+        ax = FakeAX(self.cfg)
+        ax.page['AXURL'] = 'about:blank'
+        with patch('renew.bridge_request',return_value={'success':True}) as http:
+            with self.assertRaises(KeeperError):
+                self.engine(ax).open(send_link=True)
+        self.assertEqual(http.call_args.args[-1]['organization'],'弗忧联盟')
+
 
 class KeepaliveTests(Fixture):
     def probes(self,read=0,write=0):

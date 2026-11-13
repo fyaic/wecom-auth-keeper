@@ -33,11 +33,23 @@ def call_cli(binary, args, timeout):
 
 def run_probes(cfg):
     binary = executable(cfg.get("wecom_cli"), "wecom-cli")
-    read = call_cli(binary, ["sheet", "get", "--docid", cfg["read_docid"]], cfg["probe_timeout"])
-    grid = {"start_row": 0, "start_column": 0, "rows": [{"values": [{
-        "data_type": "TEXT", "cell_value": {"text": f"keepalive-{int(time.time())}"}}]}]}
-    write = call_cli(binary, ["sheet", "contents", "update", "--docid", cfg["write_docid"],
-                             "--sheet-id", cfg["write_sheet"], "--grid-data", json.dumps(grid)], cfg["probe_timeout"])
+    smart = bool(cfg.get("read_sheet") or cfg.get("write_field"))
+    if smart and not (cfg.get("read_sheet") and cfg.get("write_field")):
+        raise ValueError("read_sheet and write_field are required together for smartsheet probes")
+    if smart:
+        read = call_cli(binary, ["smartsheet", "records", "list", "--docid", cfg["read_docid"],
+                                 "--sheet-id", cfg["read_sheet"], "--type", "records", "--limit", "1"],
+                        cfg["probe_timeout"])
+        payload = {"docid": cfg["write_docid"], "sheet_id": cfg["write_sheet"], "key_type": "field_title",
+                   "records": [{"values": {cfg["write_field"]: f"keepalive-{int(time.time())}"}}]}
+        write = call_cli(binary, ["smartsheet", "records", "add", "--json", json.dumps(payload)],
+                         cfg["probe_timeout"])
+    else:
+        read = call_cli(binary, ["sheet", "get", "--docid", cfg["read_docid"]], cfg["probe_timeout"])
+        grid = {"start_row": 0, "start_column": 0, "rows": [{"values": [{
+            "data_type": "TEXT", "cell_value": {"text": f"keepalive-{int(time.time())}"}}]}]}
+        write = call_cli(binary, ["sheet", "contents", "update", "--docid", cfg["write_docid"],
+                                 "--sheet-id", cfg["write_sheet"], "--grid-data", json.dumps(grid)], cfg["probe_timeout"])
     return {"ok": read["ok"] and write["ok"], "checked_at": datetime.now().isoformat(), "read": read, "write": write}
 
 
