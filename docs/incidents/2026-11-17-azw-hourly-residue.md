@@ -36,5 +36,5 @@
 
 ## 遗留（人工事项）
 
-- `com.fyaic.wecomacl-renew`（keepalive）配置占位符（`read_docid`/`write_docid`/`write_sheet`）未填，每小时空转报 `invalid_config`。需要真实 docid 数据或直接禁用该 launchd 任务——本次不动（无 GUI 影响，仅日志噪音）。
+- `com.fyaic.wecomacl-renew`（keepalive）配置占位符（`read_docid`/`write_docid`/`write_sheet`）未填，每小时空转报 `invalid_config`。**处置（2026-11-17 13:5x，bondie 决定）**：已禁用——`launchctl bootout gui/$UID/com.fyaic.wecomacl-renew` + plist 改名 `com.fyaic.wecomacl-renew.plist.disabled` 保留在 LaunchAgents 目录。理由：其业务探针链（wecom-cli + 专用测试表）从未在本机配好，过期后兜底使命已被修好的 maintain 前置续期覆盖。恢复方式：`mv` 回原名 + `launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.fyaic.wecomacl-renew.plist`，并补全三个 docid 字段。
 - 维护超时分支（`maintenance_timeout` + close_window 策略）由 maintain.py 单独拉起关页进程，**不经过** restore_navigation——该路径的遗留面板仍依赖桥侧守卫兜底（见桥仓特性）。
