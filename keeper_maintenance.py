@@ -9,7 +9,7 @@ from renew import Renewal
 
 DEFAULT_POLICY = {"within_hours": 24, "interval_seconds": 3600,
                   "min_renew_interval_seconds": 3600, "retry_seconds": 300,
-                  "close_window": True}
+                  "close_window": True, "stale_after_hours": 24}
 
 
 def policy(cfg):
@@ -18,12 +18,14 @@ def policy(cfg):
         raise KeeperError("invalid_maintenance_policy", "Unknown maintenance settings", 3)
     value = {**DEFAULT_POLICY, **raw}
     limits = {"within_hours": (1, 168), "interval_seconds": (60, 86400),
-              "min_renew_interval_seconds": (60, 86400), "retry_seconds": (60, 3600)}
+              "min_renew_interval_seconds": (60, 86400), "retry_seconds": (60, 3600),
+              "stale_after_hours": (1, 168)}
     for name, (low, high) in limits.items():
         number = value[name]
         if (isinstance(number, bool) or not isinstance(number, (int, float))
                 or not math.isfinite(number) or not low <= number <= high
-                or (name.endswith("seconds") and not isinstance(number, int))):
+                or ((name.endswith("seconds") or name == "stale_after_hours")
+                    and not isinstance(number, int))):
             raise KeeperError("invalid_maintenance_policy", f"Invalid maintenance field: {name}", 3)
     if not isinstance(value["close_window"], bool) or value["interval_seconds"] >= value["within_hours"] * 3600:
         raise KeeperError("invalid_maintenance_policy", "Check interval must be shorter than the pre-renew window", 3)
@@ -78,6 +80,46 @@ def expiry_text(row):
     return row["expiry"].isoformat(timespec="minutes") if row["expiry"] else None
 
 
+def navigation_due(state, settings, rows, now, *, pending=False):
+    """是否需要触碰 GUI 导航。False = 全部目标行都有较新的「远期到期」
+    记录且无未决撤销——可零 GUI 跳过（2026-11-17 AZW 每小时残窗事故：
+    未到期也无条件全导航，连续 83 次失败且从不清理，成为残窗源头）。
+
+    需要导航的条件（任一）：有行存在未决 intent（门审轮1 P1——restored
+    分支在 authorize 前持久化且无 journal 保护，恢复永远优先）；有行无
+    expiry 记录（首跑学习）；有行临期（expiry ≤ now + within_hours）；
+    记录陈旧（checked_at 距今超过 stale_after_hours——外部续期/撤销只能
+    靠重观测发现，诚实的重验税）；存在未决撤销 journal。"""
+    if pending:
+        return True
+    for name in rows:
+        record = state["permissions"].get(name) or {}
+        if record.get("intent"):
+            # 门审轮1 P1：restored 分支在 authorize 完成前就持久化 intent 且
+            # 无 journal 保护——未决 intent 是本仓自己的恢复未完成证据，
+            # 「恢复永远优先」不得被 not_due 门延迟（跳过最坏推迟 24h）。
+            return True
+        expiry = record.get("expiry")
+        if not expiry:
+            return True
+        try:
+            when = iso(expiry)
+        except ValueError:
+            return True
+        if when is None or when <= now() + timedelta(hours=settings["within_hours"]):
+            return True
+        checked = record.get("checked_at")
+        seen = None
+        if checked:
+            try:
+                seen = iso(checked)
+            except ValueError:
+                seen = None
+        if seen is None or now() - seen > timedelta(hours=settings["stale_after_hours"]):
+            return True
+    return False
+
+
 def observe(engine, window):
     return engine.wait(lambda: engine.read_rows(window),
                        lambda rows: all(row["status"] in {"authorized", "expired"} for row in rows.values()),
@@ -93,6 +135,14 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
     if state["next_retry_at"] > now().timestamp():
         return {"ok": False, "mode": "maintenance", "status": "backoff",
                 "next_retry_at": state["next_retry_at"], "business_verified": False}, 2
+    if not navigation_due(state, settings, engine.rows, now, pending=engine.journal.exists()):
+        # 未到期跳过：零 GUI、零状态副作用（failures/next_retry_at 原样保留
+        # ——跳过既不证明也不推翻上一次导航的成败），只落本轮 run result。
+        result = {"ok": True, "mode": "maintenance", "status": "not_due_skipped",
+                  "rows": {}, "business_verified": False, "pending_recovery": False,
+                  "checked_at": now().isoformat(timespec="seconds")}
+        atomic_json(cfg["state_file"], result)
+        return result, 0
     result = {"ok": False, "mode": "maintenance", "status": "failed", "rows": {},
               "business_verified": False, "pending_recovery": engine.journal.exists()}
     attempted = False
@@ -157,14 +207,24 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
         error, _ = emit_error(exc)
         result.update(error)
     finally:
-        if attempted and settings["close_window"]:
+        if attempted:
+            # 2026-11-14 语义：close_window 只关已验证授权页。2026-11-17 起在其
+            # 【之后】追加导航遗留面板清理（搜索下拉/聊天记录面板——每小时
+            # 残窗的第三根源；先关页再做，天然消除授权页对主窗工具栏的遮挡，
+            # 门审轮1 P2-3）。
+            if settings["close_window"]:
+                try:
+                    closed, _ = engine.close_window()
+                    result["cleanup"] = {"ok": True, "closed": closed["closed"]}
+                except Exception:
+                    result["cleanup"] = {"ok": False, "error": "window_cleanup_failed"}
+                    if result["ok"]:
+                        result.update(ok=False, status="cleanup_failed", error="window_cleanup_failed")
             try:
-                closed, _ = engine.close_window()
-                result["cleanup"] = {"ok": True, "closed": closed["closed"]}
+                import keeper_navigation
+                result.setdefault("cleanup", {})["navigation"] = keeper_navigation.restore_navigation(engine)
             except Exception:
-                result["cleanup"] = {"ok": False, "error": "window_cleanup_failed"}
-                if result["ok"]:
-                    result.update(ok=False, status="cleanup_failed", error="window_cleanup_failed")
+                result.setdefault("cleanup", {})["navigation"] = {"ok": False}
     result["pending_recovery"] = engine.journal.exists()
     result["checked_at"] = now().isoformat(timespec="seconds")
     if result["ok"]:

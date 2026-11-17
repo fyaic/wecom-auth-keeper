@@ -60,6 +60,102 @@ def heading_matches(engine, window, search):
     return len(candidates) == 1
 
 
+def chat_row_candidates(engine):
+    """打字期搜索下拉的会话行候选 (text, node, frame, root)。
+
+    2026-11-17 实测（tools/probe_navigation_failure.py）：下拉为 app 级窗口
+    （渲染完成形态 ~320×702 AXSystemDialog，渲染初期更小）；行 = 高
+    18-40px 的 AXStaticText。主窗会话列表 below-fold 行报**虚拟坐标**
+    （y 远超根窗口底），一律以「frame 完整落在其根窗口界内」过滤——
+    界外行绝不可点。"""
+    out = []
+    budget = [0]
+    for root in engine.ax.ax_get(engine.app, "AXWindows") or []:
+        outer = engine.ax.frame(root)
+        stack = [(root, 0)]
+        while stack:
+            node, depth = stack.pop()
+            if depth > 16 or budget[0] > 1500:
+                continue
+            budget[0] += 1
+            if engine.ax.ax_get(node, "AXRole") == "AXStaticText":
+                text, bounds = engine.text(node), engine.ax.frame(node)
+                if (text and bounds and 18 <= bounds[3] <= 40
+                        and engine.contains(outer, bounds)):
+                    out.append((text, node, bounds, root))
+            stack.extend((child, depth + 1)
+                         for child in engine.ax.ax_get(node, "AXChildren") or [])
+    return out
+
+
+def select_chat(engine, native, window, search):
+    """从搜索下拉选择目标会话：唯一「精确同名且界内」行才点，否则如实失败。
+
+    2026-11-17 修复（AZW 每小时残窗事故根因之一）：WeCom 搜索行为漂移后
+    Return 打开的是全局搜索对话框而非导航（连续 83 小时
+    navigation_target_not_found）。改为枚举+验名+点击——绝不 Return、
+    绝不点未验名/界外/歧义行；点击后仍以 heading 验证收尾。"""
+    expected = engine.cfg["bot_chat_name"]
+
+    def exact_rows():
+        return [row for row in chat_row_candidates(engine) if row[0] == expected]
+
+    rows = engine.wait(exact_rows, lambda found: len(found) >= 1,
+                       "navigation_target_not_found", timeout=5)
+    if len(rows) != 1:
+        raise KeeperError("navigation_target_not_found",
+                          "Ambiguous conversation rows in the search dropdown")
+    _, node, _bounds, root = rows[0]
+    engine.ax.click(node, root)
+    engine.wait(lambda: heading_matches(engine, window, search), bool,
+                "navigation_target_not_found", timeout=8)
+
+
+def restore_navigation(engine):
+    """导航遗留面板的 best-effort 清理（2026-11-17 事故根治配套）。
+
+    两步清场（零坐标盲点）：① 置空全局搜索框——打字期下拉随之收起
+    （探针实测）；② 聊天记录面板开着时工具栏钮显示「关闭聊天记录」，
+    唯一命中才点。逐步独立守卫，一步失败不吞其余；返回逐步结果，绝不抛。
+    残余的搜索对话框类 CG 窗（如有）属 wecom-bridge 弹窗守卫的既定职责域
+    （2026-11-17 起按窗 pacing ≤tick+60s 自动点除）——两层互补，不在本仓
+    重复实现。"""
+    steps = {}
+    if engine.app is None:
+        return steps  # 尚未 open 过——无导航遗留可清
+    windows = list(engine.ax.ax_get(engine.app, "AXWindows") or [])
+    cleared = []
+    for window in windows:
+        try:
+            search = global_search(engine, window)
+        except Exception:
+            continue  # 门审轮1 P2-1：单窗枚举失败（如树超限）不吞其余步骤
+        if search is not None:
+            try:
+                # 门审轮1 P2-2：AXUIElementSetAttributeValue 失败返回非 0
+                # 错误码而不抛——必须检查，否则清理结果误报成功。
+                cleared.append(engine.ax.set_value(search, "") == 0)
+            except Exception:
+                cleared.append(False)
+    if cleared:
+        steps["search_cleared"] = all(cleared)  # P2-5：多窗聚合，任一失败如实记 False
+    for window in windows:
+        try:
+            closers = [node for node in chrome(engine, window)
+                       if engine.ax.ax_get(node, "AXRole") == "AXButton"
+                       and label(engine, node) == "关闭聊天记录"]
+        except Exception:
+            continue  # 门审轮2 P2-A：单窗枚举失败（树超限）不吞其余窗口
+        if len(closers) == 1:
+            try:
+                engine.ax.click(closers[0], window)
+                steps["history_panel_closed"] = True
+            except Exception:
+                steps["history_panel_closed"] = False
+            break
+    return steps
+
+
 def open_chat_history(engine, native):
     windows = []
     for window in engine.ax.ax_get(engine.app, "AXWindows") or []:
@@ -72,13 +168,11 @@ def open_chat_history(engine, native):
     engine.focus_window(native, window, "navigation_unavailable")
     if not heading_matches(engine, window, search):
         engine.ax.replace_search(native, engine.app, window, search, engine.cfg["bot_chat_name"])
-        # Search results are asynchronous and not AX-readable on WeCom 5.0.12.
-        # Return only navigates. It cannot send a message, and the resulting
-        # title AND the configured link identity are checked before continuing.
-        engine.sleep(1.5)
-        engine.ax.submit_search(native, engine.app, window, search, engine.cfg["bot_chat_name"])
-        engine.wait(lambda: heading_matches(engine, window, search), bool,
-                    "navigation_target_not_found", timeout=8)
+        # Search results are asynchronous; a row is only clicked after its
+        # exact name is verified inside the dropdown's own window bounds. It
+        # cannot send a message, and the resulting title AND the configured
+        # link identity are checked before continuing.
+        select_chat(engine, native, window, search)
 
     def history_fields():
         if not heading_matches(engine, window, search):

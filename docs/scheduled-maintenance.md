@@ -4,6 +4,12 @@
 
 本入口按页面有效期调度，**不要求文档测试表，也不会运行文档写探针**。页面验证和业务验证分开：结果始终明确 `business_verified: false`，实际文档、微盘、邮箱等业务应由对应调用方复查。旧 `keepalive.py` 的文档双探针恢复流程保留不变。
 
+## 未到期先决门（2026-11-17）
+
+每小时唤醒后、触碰任何 GUI 之前，`run_cycle` 先查维护状态（`navigation_due`）：全部目标权限都有 `expiry` 记录、均在续期窗口之外（`expiry > now + within_hours`）、最近一次观测新鲜（`checked_at` 距今 < `stale_after_hours`，默认 24 小时，可配 1–168 的整数）、且无未决撤销 journal 时，本轮**完全不启动导航**，直接落 `{"ok": true, "status": "not_due_skipped"}`（退出码 0）。跳过不改动 `failures`/`next_retry_at`——它既不证明也不推翻上一次导航的成败。
+
+以下任一条件都会恢复完整导航：某权限还没有观测记录（首次学习）、某权限存在未决 `intent`（上一次恢复未完成的本仓证据——恢复永远优先）、某权限进入续期窗口、记录陈旧（外部续期/撤销只能靠重观测发现——这是诚实的重验税，最坏每 `stale_after_hours` 一次 GUI 触碰）、存在 pending journal。背景：2026-11-17 之前未到期也无条件全导航，连续 83 次失败并在桌面遗留搜索面板（见 [incidents/2026-11-17-azw-hourly-residue](incidents/2026-11-17-azw-hourly-residue.md)）。
+
 ## 1. 每个 Bot 一份配置
 
 复制 [config.maintenance.example.json](../config.maintenance.example.json) 到仓库外的私有目录，填写机器人会话名、授权链接的两个身份参数和 Python 绝对路径。各 Bot 使用不同的状态与日志目录。模板的权限仅作示例，应删改为该部署确实需要维护的能力。
