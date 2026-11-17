@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Hourly residue root cure — 2026-11-17
+
+- Add a not-due gate before any GUI work: hourly runs with fresh far-future expiry records for every target row (and no pending journal) now finish as `not_due_skipped` with zero UI access and zero state side effects; new `maintenance.stale_after_hours` policy (default 24h) bounds how long observation data is trusted.
+- Fix chat navigation for the current WeCom search behavior: Return in the search box now opens the global-search dialog instead of navigating (the source of 83 consecutive hourly failures and on-screen residue); navigation instead clicks the unique exact-name, in-window-bounds row of the typing-time dropdown and never presses Return.
+- Add best-effort navigation cleanup at the end of every maintenance cycle: clear the global search field (collapses the dropdown) and close an open chat-history panel via its unique toolbar toggle; results land in `cleanup.navigation`.
+- Root-cause record with measured evidence and probe tooling: [docs/incidents/2026-11-17-azw-hourly-residue.md](docs/incidents/2026-11-17-azw-hourly-residue.md), `tools/probe_navigation_failure.py`.
+
 ### Reusable multi-permission scheduling — 2026-10-23
 
 - Add standalone `maintain.py`: default hourly scheduling and a 24-hour pre-expiry window for an explicit combination of capability labels, without Gateway or Codex dependencies.

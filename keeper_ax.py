@@ -5,7 +5,7 @@ from keeper_common import KeeperError
 from AppKit import NSWorkspace, NSPasteboard, NSPasteboardItem, NSPasteboardTypeString
 from ApplicationServices import (
     AXIsProcessTrusted, AXUIElementCopyAttributeValue, AXUIElementCreateApplication,
-    AXUIElementPerformAction, AXUIElementCopyActionNames, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
+    AXUIElementPerformAction, AXUIElementSetAttributeValue, AXUIElementCopyActionNames, AXValueGetValue, kAXValueCGPointType, kAXValueCGSizeType,
 )
 from Quartz import (
     CGEventCreateMouseEvent, CGEventPost, CGPoint, kCGEventLeftMouseDown,
@@ -76,6 +76,16 @@ def submit_search(native, app, window, element, expected):
     if ax_get(element, "AXValue") != expected:
         raise KeeperError("navigation_input_failed", "Search text changed before selection")
     search_key(native, app, window, element, 36)  # Return; only while search has focus
+
+
+def set_value(element, value):
+    """AXValue 写入（置空搜索框收下拉用；2026-11-17 探针实测 CEF 文本框接受）。
+
+    历史注记：submit_search 的 Return 路径自 2026-11-17 起不再被导航使用——
+    WeCom 搜索行为漂移后 Return 打开的是 640×560 全局搜索对话框而非导航
+    （tools/probe_navigation_failure.py 取证）；函数保留供既有调用方与测试。
+    """
+    return AXUIElementSetAttributeValue(element, "AXValue", value)
 
 
 def ax_get(element, attribute):

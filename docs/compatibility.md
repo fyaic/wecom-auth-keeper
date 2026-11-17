@@ -19,7 +19,7 @@
 4. 使用 Gateway 调度时，同时更新支持周期清理的 Gateway 代码，设置 `WECOM_AUTH_KEEPER_EXISTING_WINDOW_ONLY=false`、`WECOM_AUTH_MAINTENANCE_PRE_RENEW=true`、`WECOM_AUTH_KEEPER_WITHIN_HOURS=24`。需要关页时设 `WECOM_AUTH_KEEPER_CLOSE_WINDOW=true`；旧 Keeper 不支持关页命令，不可单独开启这个选项。
 5. 在同一 launchd 启动链验证，而非仅从终端运行。验证页面身份、有效期延长、pending 清除和关页结果，并用同一 Bot 的业务探针独立确认。
 
-中文原生聊天界面、已登录解锁的桌面和后台 Python 的辅助功能授权是前提。运行期间仍会切换会话与前台；完成后关闭权限页不等于恢复原聊天、关闭聊天记录面板或实现多个 UI 服务互斥。其他 UI 服务需要共享桌面锁或错开执行；本项目只协调使用 `~/.wecom-auth-renew/desktop.lock` 的 Keeper 进程。锁屏、强制杀进程或客户端卡死时不能保证清理完成。
+中文原生聊天界面、已登录解锁的桌面和后台 Python 的辅助功能授权是前提。运行期间仍会切换会话与前台；完成后关闭权限页不等于恢复原聊天或实现多个 UI 服务互斥。2026-11-17 起，每轮收尾会 best-effort 清理导航遗留：置空全局搜索框（打字期下拉随之收起）并在聊天记录面板开启时点击唯一的「关闭聊天记录」钮（结果记录在 `cleanup.navigation`）——但**不恢复原会话**；残余的搜索对话框类 CG 窗口由 wecom-bridge 侧弹窗守卫兜底（同日按窗 pacing 自动点除），两层职责互补。维护超时分支的关页进程不经过此清理。其他 UI 服务需要共享桌面锁或错开执行；本项目只协调使用 `~/.wecom-auth-renew/desktop.lock` 的 Keeper 进程。锁屏、强制杀进程或客户端卡死时不能保证清理完成。
 
 新增独立 `maintain.py` 的配置、调度和恢复逻辑有混合多权限回归覆盖；本机直接 Python launchd 试跑被辅助功能检查拒绝，未完成此启动链的真实续期。原 Gateway 启动链继续运行。详见[独立调度验收边界](validation.md)。
 
