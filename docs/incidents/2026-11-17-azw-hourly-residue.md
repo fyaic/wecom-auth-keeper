@@ -29,7 +29,10 @@
 ## 验证
 
 - 单测 141 例全绿（新增：门六态含 intent + 策略校验 + 选择纪律三态 + 清理军链五态含返回码/多窗聚合 + skip 保 permissions + cleanup.navigation 接线；既有 submit 断言更新为验名行点击）；`scripts/check_repository.py` PASS。门审两轮：轮1 NOT LGTM（P1 intent 漏窗 + 5 P2）→ 整改 → 轮2 LGTM（0 P0/0 P1）→ P2 全收口。
-- 现场验证（部署后）：首轮（状态陈旧 ⇒ 重验导航）走通修复后的选择路径并刷新 checked_at；此后每小时应见 `not_due_skipped` 且桥侧零新增残窗，直至 2026-11-19 17:41 进入到期窗。
+- **现场验证（2026-11-17 13:34–13:36，部署后三连胜）**：
+  1. 13:34:19 首轮（checked_at 陈旧 ⇒ 门放行重验）：**healthy**——验名行点击导航成功，`搜索与获取文档内容` authorized/not_due（expiry 2026-11-20 17:41），`cleanup = {closed: true, navigation: {search_cleared: true, history_panel_closed: true}}`，桥侧 13:2x–13:4x **零新增残窗**、health ok；
+  2. 13:36:37 手动加跑一轮：**`not_due_skipped`、exit 0、约 1 秒完成、零 GUI**——未到期门生产实证；
+  3. 此后每小时整点应为 `not_due_skipped`（零 GUI），直至 2026-11-19 17:41 进入到期窗后按修复后的导航路径续期。
 
 ## 遗留（人工事项）
 
