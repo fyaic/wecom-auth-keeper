@@ -50,7 +50,9 @@ class NavigationAX(FakeAX):
             raise RuntimeError('set_value failed')
         self.set_values.append((element, value))
         element['AXValue'] = value
-        return 0  # 与真实 AXUIElementSetAttributeValue 语义一致（0=成功）
+        # 与真实 AXUIElementSetAttributeValue 语义一致：0=成功，失败返回
+        # 非 0 错误码而不抛（门审轮2 P2-C 旋钮）
+        return getattr(self, 'set_value_code', 0)
 
     def click(self, element, window):
         self.clicks.append(element)
@@ -243,3 +245,27 @@ class RestoreNavigationTests(Fixture):
         steps = restore_navigation(self._engine(ax))
         self.assertEqual(steps, {'search_cleared': False, 'history_panel_closed': True})
         self.assertIn(ax.history, ax.clicks)
+
+    def test_set_value_error_code_reports_false(self):
+        # 门审轮2 P2-C：真实 AX 失败形态是返回非 0 不抛——不得误报成功
+        from keeper_navigation import restore_navigation
+        ax = NavigationAX(self.cfg)
+        ax.set_value_code = -25200  # kAXErrorCannotComplete
+        steps = restore_navigation(self._engine(ax))
+        self.assertEqual(steps, {'search_cleared': False})
+
+    def test_multi_window_clear_aggregates_all(self):
+        # 门审轮2 P2-C/P2-5：多窗任一失败 ⇒ 聚合为 False
+        from keeper_navigation import restore_navigation
+        ax = NavigationAX(self.cfg)
+        second = node('AXWindow', _frame=(1200, 88, 900, 800), children=[
+            node('AXTextField', _frame=(1240, 103, 180, 34))])
+        ax.app['AXWindows'].append(second)
+        original = ax.set_value
+
+        def coded(element, value):
+            result = original(element, value)
+            return -25200 if element is second['AXChildren'][0] else result
+        ax.set_value = coded
+        steps = restore_navigation(self._engine(ax))
+        self.assertEqual(steps, {'search_cleared': False})

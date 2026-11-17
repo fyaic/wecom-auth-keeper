@@ -28,7 +28,7 @@
 
 ## 验证
 
-- 单测 137 例全绿（新增：门五态 + 策略校验 + 选择纪律三态 + 清理军链三态；既有 submit 断言更新为验名行点击）；`scripts/check_repository.py` PASS。
+- 单测 141 例全绿（新增：门六态含 intent + 策略校验 + 选择纪律三态 + 清理军链五态含返回码/多窗聚合 + skip 保 permissions + cleanup.navigation 接线；既有 submit 断言更新为验名行点击）；`scripts/check_repository.py` PASS。门审两轮：轮1 NOT LGTM（P1 intent 漏窗 + 5 P2）→ 整改 → 轮2 LGTM（0 P0/0 P1）→ P2 全收口。
 - 现场验证（部署后）：首轮（状态陈旧 ⇒ 重验导航）走通修复后的选择路径并刷新 checked_at；此后每小时应见 `not_due_skipped` 且桥侧零新增残窗，直至 2026-11-19 17:41 进入到期窗。
 
 ## 遗留（人工事项）

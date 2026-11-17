@@ -140,9 +140,12 @@ def restore_navigation(engine):
     if cleared:
         steps["search_cleared"] = all(cleared)  # P2-5：多窗聚合，任一失败如实记 False
     for window in windows:
-        closers = [node for node in chrome(engine, window)
-                   if engine.ax.ax_get(node, "AXRole") == "AXButton"
-                   and label(engine, node) == "关闭聊天记录"]
+        try:
+            closers = [node for node in chrome(engine, window)
+                       if engine.ax.ax_get(node, "AXRole") == "AXButton"
+                       and label(engine, node) == "关闭聊天记录"]
+        except Exception:
+            continue  # 门审轮2 P2-A：单窗枚举失败（树超限）不吞其余窗口
         if len(closers) == 1:
             try:
                 engine.ax.click(closers[0], window)

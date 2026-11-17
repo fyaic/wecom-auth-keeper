@@ -85,10 +85,11 @@ def navigation_due(state, settings, rows, now, *, pending=False):
     记录且无未决撤销——可零 GUI 跳过（2026-11-17 AZW 每小时残窗事故：
     未到期也无条件全导航，连续 83 次失败且从不清理，成为残窗源头）。
 
-    需要导航的条件（任一）：有行无 expiry 记录（首跑学习）；有行临期
-    （expiry ≤ now + within_hours）；记录陈旧（checked_at 距今超过
-    stale_after_hours——外部续期/撤销只能靠重观测发现，诚实的重验税）；
-    存在未决撤销 journal（恢复永远优先）。"""
+    需要导航的条件（任一）：有行存在未决 intent（门审轮1 P1——restored
+    分支在 authorize 前持久化且无 journal 保护，恢复永远优先）；有行无
+    expiry 记录（首跑学习）；有行临期（expiry ≤ now + within_hours）；
+    记录陈旧（checked_at 距今超过 stale_after_hours——外部续期/撤销只能
+    靠重观测发现，诚实的重验税）；存在未决撤销 journal。"""
     if pending:
         return True
     for name in rows:
