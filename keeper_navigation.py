@@ -124,14 +124,21 @@ def restore_navigation(engine):
     if engine.app is None:
         return steps  # 尚未 open 过——无导航遗留可清
     windows = list(engine.ax.ax_get(engine.app, "AXWindows") or [])
+    cleared = []
     for window in windows:
-        search = global_search(engine, window)
+        try:
+            search = global_search(engine, window)
+        except Exception:
+            continue  # 门审轮1 P2-1：单窗枚举失败（如树超限）不吞其余步骤
         if search is not None:
             try:
-                engine.ax.set_value(search, "")
-                steps["search_cleared"] = True
+                # 门审轮1 P2-2：AXUIElementSetAttributeValue 失败返回非 0
+                # 错误码而不抛——必须检查，否则清理结果误报成功。
+                cleared.append(engine.ax.set_value(search, "") == 0)
             except Exception:
-                steps["search_cleared"] = False
+                cleared.append(False)
+    if cleared:
+        steps["search_cleared"] = all(cleared)  # P2-5：多窗聚合，任一失败如实记 False
     for window in windows:
         closers = [node for node in chrome(engine, window)
                    if engine.ax.ax_get(node, "AXRole") == "AXButton"

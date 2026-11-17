@@ -93,6 +93,11 @@ def navigation_due(state, settings, rows, now, *, pending=False):
         return True
     for name in rows:
         record = state["permissions"].get(name) or {}
+        if record.get("intent"):
+            # 门审轮1 P1：restored 分支在 authorize 完成前就持久化 intent 且
+            # 无 journal 保护——未决 intent 是本仓自己的恢复未完成证据，
+            # 「恢复永远优先」不得被 not_due 门延迟（跳过最坏推迟 24h）。
+            return True
         expiry = record.get("expiry")
         if not expiry:
             return True
@@ -202,21 +207,23 @@ def run_cycle(cfg, ax, *, now=datetime.now, engine=None):
         result.update(error)
     finally:
         if attempted:
-            # 导航遗留面板清理（2026-11-17）：close_window 只关已验证授权页，
-            # 搜索下拉/聊天记录面板此前全部遗留——每小时残窗的第三根源。
+            # 2026-11-14 语义：close_window 只关已验证授权页。2026-11-17 起在其
+            # 【之后】追加导航遗留面板清理（搜索下拉/聊天记录面板——每小时
+            # 残窗的第三根源；先关页再做，天然消除授权页对主窗工具栏的遮挡，
+            # 门审轮1 P2-3）。
+            if settings["close_window"]:
+                try:
+                    closed, _ = engine.close_window()
+                    result["cleanup"] = {"ok": True, "closed": closed["closed"]}
+                except Exception:
+                    result["cleanup"] = {"ok": False, "error": "window_cleanup_failed"}
+                    if result["ok"]:
+                        result.update(ok=False, status="cleanup_failed", error="window_cleanup_failed")
             try:
                 import keeper_navigation
                 result.setdefault("cleanup", {})["navigation"] = keeper_navigation.restore_navigation(engine)
             except Exception:
                 result.setdefault("cleanup", {})["navigation"] = {"ok": False}
-            if settings["close_window"]:
-                try:
-                    closed, _ = engine.close_window()
-                    result["cleanup"].update(ok=True, closed=closed["closed"])
-                except Exception:
-                    result["cleanup"].update(ok=False, error="window_cleanup_failed")
-                    if result["ok"]:
-                        result.update(ok=False, status="cleanup_failed", error="window_cleanup_failed")
     result["pending_recovery"] = engine.journal.exists()
     result["checked_at"] = now().isoformat(timespec="seconds")
     if result["ok"]:

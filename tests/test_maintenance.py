@@ -55,6 +55,8 @@ class MaintenanceTests(Fixture):
         self.assertEqual((code, result['status']), (0, 'healthy'))
         self.assertEqual(ax.clicks, [])
         engine.close_window.assert_called_once()
+        # 门审轮1 P2-4：清理军链接线端到端（FakeAX 无搜索框/面板 ⇒ 空步集）
+        self.assertEqual(result['cleanup']['navigation'], {})
 
     def test_cooldown_is_per_permission_not_whole_bot(self):
         ax, engine = self.setup_cycle(['发送消息', '发送邮件'])
@@ -260,6 +262,29 @@ class NotDueGateTests(MaintenanceTests):
         self.cycle(ax, engine)
         opened.assert_called()
 
+    def test_unresolved_intent_forces_navigation(self):
+        # 门审轮1 P1：restored 分支在 authorize 前持久化 intent 且无 journal
+        # 保护——未决 intent 必须强制导航（恢复永远优先）。
+        ax, engine = self.setup_cycle(rows=['发送消息'])
+        opened = Mock(return_value=None)
+        engine.open = opened
+        permissions = self._seed_state(engine)
+        permissions['发送消息']['intent'] = {
+            'expiry_before': '2026-11-20T17:41', 'started_at': 0}
+        atomic_json(Path(self.cfg['state_file'] + '.maintenance.json'),
+                    {'version': 1, 'identity': engine.identity,
+                     'permissions': permissions, 'failures': 0, 'next_retry_at': 0})
+        self.cycle(ax, engine)
+        opened.assert_called()
+
+    def test_skip_preserves_permissions(self):
+        ax, engine = self.setup_cycle(rows=['发送消息'])
+        engine.open = Mock(return_value=None)
+        seeded = self._seed_state(engine, failures=2)
+        self.cycle(ax, engine)
+        self.assertEqual(self.scheduler()['permissions'], seeded)
+        self.assertEqual(self.scheduler()['failures'], 2)
+
     def test_pending_journal_forces_navigation(self):
         ax, engine = self.setup_cycle(rows=['发送消息'])
         opened = Mock(return_value=None)
@@ -282,6 +307,18 @@ class NotDueGateTests(MaintenanceTests):
                                        lambda: datetime(2026, 11, 18, 13, 0, 1)))  # 陈旧
         self.assertTrue(navigation_due({'permissions': {}}, DEFAULT_POLICY, rows, far))
         self.assertTrue(navigation_due(state, DEFAULT_POLICY, rows, far, pending=True))
+        # 门审轮1 P2-4：checked_at 缺失/非法 iso 分支
+        missing = {'permissions': {'a': {'expiry': '2026-11-23T17:41'}}}
+        self.assertTrue(navigation_due(missing, DEFAULT_POLICY, rows, far))
+        invalid = {'permissions': {'a': {'expiry': '2026-11-23T17:41',
+                                         'checked_at': 'not-a-date'}}}
+        self.assertTrue(navigation_due(invalid, DEFAULT_POLICY, rows, far))
+        # P1：未决 intent 强制导航
+        intent = {'permissions': {'a': {'expiry': '2026-11-23T17:41',
+                                        'checked_at': '2026-11-17T12:00:00',
+                                        'intent': {'expiry_before': '2026-11-23T17:41',
+                                                   'started_at': 0}}}}
+        self.assertTrue(navigation_due(intent, DEFAULT_POLICY, rows, far))
 
 
 class StalePolicyTests(Fixture):

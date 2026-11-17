@@ -50,6 +50,7 @@ class NavigationAX(FakeAX):
             raise RuntimeError('set_value failed')
         self.set_values.append((element, value))
         element['AXValue'] = value
+        return 0  # 与真实 AXUIElementSetAttributeValue 语义一致（0=成功）
 
     def click(self, element, window):
         self.clicks.append(element)

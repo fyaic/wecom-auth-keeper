@@ -20,9 +20,9 @@
 
 - **探针**：`tools/probe_navigation_failure.py`（worktree 分支）逐步复刻导航链——v1 证「粘贴落字 ✓、Return 被接收但打开对话框 ✗」；v2.x 证「下拉为 320×702 AXSystemDialog、行=AXStaticText(value)、主窗 below-fold 行报虚拟坐标 y≈2672、**界内精确同名行点击后 heading 匹配成功**」。
 - **修复**（分支 `fix/2026-11-17-azw-hourly-residue-root-cure`）：
-  1. **未到期先决门** `navigation_due`：全部目标行都有 expiry 记录、均未临期（> now + within_hours）、数据新鲜（checked_at 距今 < `stale_after_hours`，新策略键默认 24h）、无未决撤销 journal ⇒ **零 GUI 返回 `not_due_skipped`（ok=true，exit 0）**，状态零副作用（failures/next_retry_at 原样）。缺记录/临期/陈旧/有 journal ⇒ 照常导航（保住首跑学习、到期续期与恢复优先语义）。
+  1. **未到期先决门** `navigation_due`：全部目标行都无未决 `intent`、有 expiry 记录、均未临期（> now + within_hours）、数据新鲜（checked_at 距今 < `stale_after_hours`，新策略键默认 24h）、无未决撤销 journal ⇒ **零 GUI 返回 `not_due_skipped`（ok=true，exit 0）**，状态零副作用（failures/next_retry_at 原样）。缺记录/未决 intent/临期/陈旧/有 journal 任一 ⇒ 照常导航（保住首跑学习、到期续期与恢复优先语义——门审轮1 P1：`restored` 分支在 authorize 前持久化的 intent 无 journal 保护，必须同等强制导航）。
   2. **导航输入修复** `select_chat`：枚举打字期下拉中「**精确同名且完整落在其根窗口界内**」的会话行，唯一才点击；绝不 Return、绝不点未验名/界外（虚拟坐标）/歧义行；点击后仍以 heading 验证收尾。
-  3. **清理军链** `restore_navigation`（挂在 run_cycle finally，先于关页）：置空全局搜索框（下拉随之收起）+ 唯一「关闭聊天记录」钮才点（收聊天记录面板）；逐步独立守卫、绝不抛，结果入 `result["cleanup"]["navigation"]`。零坐标盲点。
+  3. **清理军链** `restore_navigation`（挂在 run_cycle finally，**关页之后**——门审轮1 P2-3，天然消除授权页对主窗工具栏的遮挡）：置空全局搜索框（`set_value` 返回码校验，下拉随之收起）+ 唯一「关闭聊天记录」钮才点（收聊天记录面板）；逐步独立守卫（单窗枚举失败不吞其余）、绝不抛，结果入 `result["cleanup"]["navigation"]`。零坐标盲点。
   4. 失败退避逻辑保持不变（到期窗内 5min→1h 重试是有意设计；#1 的门已消除「未到期也在重试」的空转）。
 - **纵深互补**：残余的搜索对话框类 CG 窗（如清理失败）由 wecom-bridge 弹窗守卫兜底（桥仓 2026-11-17 起按窗 pacing ≤tick+60s 自动点除）——本仓不重复实现坐标/键击清理，红线两侧都干净。
 
