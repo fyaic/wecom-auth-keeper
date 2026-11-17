@@ -32,7 +32,7 @@
 - **现场验证（2026-11-17 13:34–13:36，部署后三连胜）**：
   1. 13:34:19 首轮（checked_at 陈旧 ⇒ 门放行重验）：**healthy**——验名行点击导航成功，`搜索与获取文档内容` authorized/not_due（expiry 2026-11-20 17:41），`cleanup = {closed: true, navigation: {search_cleared: true, history_panel_closed: true}}`，桥侧 13:2x–13:4x **零新增残窗**、health ok；
   2. 13:36:37 手动加跑一轮：**`not_due_skipped`、exit 0、约 1 秒完成、零 GUI**——未到期门生产实证；
-  3. 此后每小时整点应为 `not_due_skipped`（零 GUI），直至 2026-11-19 17:41 进入到期窗后按修复后的导航路径续期。
+  3. 14:34:20 首个**自然整点轮**（launchd cadence）：`not_due_skipped`、零 cleanup 键（零 GUI）——门的常态行为生产实证；桥侧 14 点段残窗 0 条。此后每小时整点均为此形态，直至 2026-11-19 17:41 进入到期窗后按修复后的导航路径续期。
 
 ## 遗留（人工事项）
 
