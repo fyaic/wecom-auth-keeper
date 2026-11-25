@@ -63,7 +63,7 @@ for r in ~/projects/warecheck-v2 ~/projects/warecheck ~/projects/wecom-auth-keep
 done
 
 echo
-if echo "$SERVER_OUT" | grep -qE "last_ok_age_minutes: (-1|[1-9][0-9][0-9]*)\."; then
+if echo "$SERVER_OUT" | grep -qE "last_ok_age_minutes: (-1|100|[1-9][0-9]{2,})\."; then
   echo "!! v2 停更（无成功记录或超过 100 分钟），立即排查"
   FAIL=1
 fi
